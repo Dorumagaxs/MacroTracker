@@ -19,8 +19,7 @@ export async function addWaterEntry(amount, dateObj) {
   await db.meal_entries.add({
     id: crypto.randomUUID(), date_id, meal_name: 'Água', food_name: 'Copo de Água', is_custom: true, is_water: true,
     qty_consumed: Number(amount), serving_unit: 'ml', calories: 0,
-    macros: { protein: 0, fat: 0, carbs: 0 }, water: Number(amount),
-    created_at: Date.now()
+    macros: { protein: 0, fat: 0, carbs: 0 }, water: Number(amount), created_at: Date.now()
   });
   await recalculateDailyTotal(date_id);
 }
@@ -30,8 +29,7 @@ export async function addCustomEntry(meal_name, calories, protein, fat, carbs, d
   await db.meal_entries.add({
     id: crypto.randomUUID(), date_id, meal_name, food_name: 'Customizado', is_custom: true, is_water: false,
     qty_consumed: 1, serving_unit: 'un', calories: Number(calories),
-    macros: { protein: Number(protein), fat: Number(fat), carbs: Number(carbs) },
-    created_at: Date.now()
+    macros: { protein: Number(protein), fat: Number(fat), carbs: Number(carbs) }, created_at: Date.now()
   });
   await recalculateDailyTotal(date_id);
 }
@@ -47,9 +45,32 @@ export async function addFoodEntry(meal_name, food, qty_consumed, dateObj) {
       protein: parseFloat((food.macros.protein * ratio).toFixed(1)),
       fat: parseFloat((food.macros.fat * ratio).toFixed(1)),
       carbs: parseFloat((food.macros.carbs * ratio).toFixed(1))
-    },
-    created_at: Date.now()
+    }, created_at: Date.now()
   });
+  await recalculateDailyTotal(date_id);
+}
+
+export async function addSavedMealToDiary(meal_name, saved_meal, dateObj) {
+  const date_id = formatDateId(dateObj);
+  const timestamp = Date.now();
+  
+  const entriesToAdd = saved_meal.items.map((item, index) => {
+      const ratio = Number(item.qty) / item.food.base_serving;
+      return {
+          id: crypto.randomUUID(), date_id, meal_name: meal_name,
+          food_id: item.food.id, food_name: item.food.name, is_custom: false, is_water: false,
+          qty_consumed: Number(item.qty), serving_unit: item.food.serving_unit,
+          calories: Math.round(item.food.calories * ratio),
+          macros: {
+              protein: parseFloat((item.food.macros.protein * ratio).toFixed(1)),
+              fat: parseFloat((item.food.macros.fat * ratio).toFixed(1)),
+              carbs: parseFloat((item.food.macros.carbs * ratio).toFixed(1))
+          },
+          created_at: timestamp + index // keeps order
+      };
+  });
+  
+  await db.meal_entries.bulkAdd(entriesToAdd);
   await recalculateDailyTotal(date_id);
 }
 
@@ -62,13 +83,15 @@ export async function createNewFood(name, base_serving, unit, calories, protein,
   return newFood;
 }
 
-export async function updateFood(id, updatedData) {
-  await db.foods.update(id, updatedData);
+export async function deleteFood(id) { await db.foods.delete(id); }
+
+export async function createSavedMeal(name, items) {
+  const newMeal = { id: crypto.randomUUID(), name, items };
+  await db.meals.add(newMeal);
+  return newMeal;
 }
 
-export async function deleteFood(id) {
-  await db.foods.delete(id);
-}
+export async function deleteSavedMeal(id) { await db.meals.delete(id); }
 
 export async function deleteEntry(id, date_id) {
   await db.meal_entries.delete(id);

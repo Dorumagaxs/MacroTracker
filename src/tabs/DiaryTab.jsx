@@ -2,25 +2,25 @@ import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { formatDateId, isToday, isYesterday, isTomorrow, getDailyGoal } from '../utils/dateUtils';
-import { addCustomEntry, deleteEntry, addFoodEntry, createNewFood, addWaterEntry } from '../services/crud';
+import { addCustomEntry, deleteEntry, addFoodEntry, createNewFood, addWaterEntry, addSavedMealToDiary } from '../services/crud';
 import DateSelector from '../components/DateSelector';
 
 export default function DiaryTab({ selectedDate, setSelectedDate }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showWaterModal, setShowWaterModal] = useState(false);
   
-  const [addMode, setAddMode] = useState('catalog');
+  const [addMode, setAddMode] = useState('catalog'); // catalog, meals, custom, create
   const [mealName, setMealName] = useState('Almoço');
-  const [cal, setCal] = useState('');
-  const [prot, setProt] = useState('');
-  const [fat, setFat] = useState('');
-  const [carb, setCarb] = useState('');
+  
+  const [cal, setCal] = useState(''); const [prot, setProt] = useState(''); const [fat, setFat] = useState(''); const [carb, setCarb] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFood, setSelectedFood] = useState(null);
   const [consumeQty, setConsumeQty] = useState('');
   const [newFoodName, setNewFoodName] = useState('');
   const [baseServing, setBaseServing] = useState('100');
   const [waterAmount, setWaterAmount] = useState('');
+  
+  const [selectedMealObj, setSelectedMealObj] = useState(null);
 
   const targetDateStr = formatDateId(selectedDate);
   
@@ -29,10 +29,13 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
 
   const dailyLog = useLiveQuery(() => db.daily_logs.get(targetDateStr), [targetDateStr]) || { total_calories: 0, total_protein: 0, total_fat: 0, total_carbs: 0, total_water: 0 };
   const mealEntries = useLiveQuery(() => db.meal_entries.where({ date_id: targetDateStr }).sortBy('created_at'), [targetDateStr]) || [];
+  
   const foods = useLiveQuery(() => {
     if (!searchTerm) return db.foods.limit(20).toArray();
     return db.foods.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).toArray();
   }, [searchTerm]) || [];
+  
+  const savedMeals = useLiveQuery(() => db.meals.toArray()) || [];
 
   const groupedEntries = useMemo(() => {
     return mealEntries.reduce((acc, entry) => {
@@ -42,12 +45,21 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
     }, {});
   }, [mealEntries]);
 
-  // Handlers omitted for brevity in Python string, logic identical
   const handleAddCustom = async (e) => { e.preventDefault(); await addCustomEntry(mealName, cal, prot || 0, fat || 0, carb || 0, selectedDate); closeModal(); };
   const handleAddFromCatalog = async (e) => { e.preventDefault(); if(!selectedFood || !consumeQty) return; await addFoodEntry(mealName, selectedFood, consumeQty, selectedDate); closeModal(); };
   const handleCreateFood = async (e) => { e.preventDefault(); const food = await createNewFood(newFoodName, baseServing, 'g', cal, prot||0, fat||0, carb||0); setSelectedFood(food); setAddMode('catalog'); setNewFoodName(''); };
   const handleAddWater = async (e) => { e.preventDefault(); if(!waterAmount) return; await addWaterEntry(waterAmount, selectedDate); setShowWaterModal(false); setWaterAmount(''); };
-  const closeModal = () => { setShowAddModal(false); setSelectedFood(null); setConsumeQty(''); setCal(''); setProt(''); setFat(''); setCarb(''); };
+  
+  const handleAddSavedMeal = async () => {
+     if(!selectedMealObj) return;
+     await addSavedMealToDiary(mealName, selectedMealObj, selectedDate);
+     closeModal();
+  };
+
+  const closeModal = () => {
+    setShowAddModal(false); setSelectedFood(null); setSelectedMealObj(null); setConsumeQty(''); setCal(''); setProt(''); setFat(''); setCarb('');
+  };
+
   const calcPercent = (current, goal) => Math.min((current / goal) * 100, 100) || 0;
   
   const handlePrev = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
@@ -58,17 +70,10 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
     <div className="space-y-6">
       <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
         <DateSelector date={selectedDate} onDateChange={setSelectedDate} label={getLabel()} onPrev={handlePrev} onNext={handleNext} />
-
         <div className="space-y-1 mb-5 border-t border-slate-100 pt-5">
-          <div className="flex justify-between text-sm">
-            <span className="font-medium text-slate-700">Calorias</span>
-            <span className="text-slate-500">{dailyLog.total_calories} / {activeGoals.calories} kcal</span>
-          </div>
-          <div className="w-full bg-slate-100 rounded-full h-3">
-            <div className="bg-md-primary h-3 rounded-full transition-all duration-500" style={{ width: `${calcPercent(dailyLog.total_calories, activeGoals.calories)}%` }}></div>
-          </div>
+          <div className="flex justify-between text-sm"><span className="font-medium text-slate-700">Calorias</span><span className="text-slate-500">{dailyLog.total_calories} / {activeGoals.calories} kcal</span></div>
+          <div className="w-full bg-slate-100 rounded-full h-3"><div className="bg-md-primary h-3 rounded-full transition-all duration-500" style={{ width: `${calcPercent(dailyLog.total_calories, activeGoals.calories)}%` }}></div></div>
         </div>
-
         <div className="space-y-3">
           {[
             { label: 'Proteínas', val: dailyLog.total_protein, goal: activeGoals.protein, color: 'bg-blue-500', unit: 'g' },
@@ -77,13 +82,8 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
             { label: 'Água', val: dailyLog.total_water || 0, goal: activeGoals.water || 3000, color: 'bg-cyan-500', unit: 'ml' }
           ].map(m => (
             <div key={m.label} className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="font-medium text-slate-600">{m.label}</span>
-                <span className="text-slate-400">{m.val} / {m.goal}{m.unit}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-1.5">
-                <div className={`${m.color} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${calcPercent(m.val, m.goal)}%` }}></div>
-              </div>
+              <div className="flex justify-between text-xs"><span className="font-medium text-slate-600">{m.label}</span><span className="text-slate-400">{m.val} / {m.goal}{m.unit}</span></div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5"><div className={`${m.color} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${calcPercent(m.val, m.goal)}%` }}></div></div>
             </div>
           ))}
         </div>
@@ -143,12 +143,16 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
               <h3 className="text-lg font-semibold text-slate-800">Registrar em: {getLabel()}</h3><button onClick={closeModal} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
             </div>
             <div className="p-4 bg-slate-50 shrink-0"><label className="text-xs font-medium text-slate-500 ml-1">Refeição Destino</label><input type="text" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-lg transition-colors shadow-sm" placeholder="Ex: Café da Manhã" required /></div>
-            <div className="flex border-b border-slate-200 shrink-0">
-              <button onClick={() => setAddMode('catalog')} className={`flex-1 py-3 text-sm font-medium ${addMode === 'catalog' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Catálogo</button>
-              <button onClick={() => setAddMode('custom')} className={`flex-1 py-3 text-sm font-medium ${addMode === 'custom' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Entrada Rápida</button>
-              <button onClick={() => setAddMode('create')} className={`flex-1 py-3 text-sm font-medium ${addMode === 'create' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Novo Alimento</button>
+            
+            <div className="flex border-b border-slate-200 shrink-0 overflow-x-auto scrollbar-hide">
+              <button onClick={() => {setAddMode('catalog'); setSelectedFood(null); setSelectedMealObj(null);}} className={`px-4 py-3 text-sm font-medium shrink-0 ${addMode === 'catalog' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Catálogo</button>
+              <button onClick={() => {setAddMode('meals'); setSelectedFood(null); setSelectedMealObj(null);}} className={`px-4 py-3 text-sm font-medium shrink-0 ${addMode === 'meals' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Refeições</button>
+              <button onClick={() => {setAddMode('custom'); setSelectedFood(null); setSelectedMealObj(null);}} className={`px-4 py-3 text-sm font-medium shrink-0 ${addMode === 'custom' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Rápida</button>
+              <button onClick={() => {setAddMode('create'); setSelectedFood(null); setSelectedMealObj(null);}} className={`px-4 py-3 text-sm font-medium shrink-0 ${addMode === 'create' ? 'text-md-primary border-b-2 border-md-primary' : 'text-slate-500'}`}>Novo</button>
             </div>
+
             <div className="p-4 overflow-y-auto flex-1">
+              
               {addMode === 'catalog' && (
                 <div className="space-y-4">
                   {!selectedFood ? (
@@ -164,6 +168,35 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
                   )}
                 </div>
               )}
+
+              {addMode === 'meals' && (
+                <div className="space-y-4">
+                  {!selectedMealObj ? (
+                     <div className="space-y-2">
+                        {savedMeals.length === 0 ? <p className="text-center text-sm text-slate-400 py-4">Nenhuma refeição agrupada foi criada. Crie em "Ajustes".</p> : savedMeals.map(m => ( 
+                           <div key={m.id} onClick={() => setSelectedMealObj(m)} className="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition">
+                              <h4 className="font-medium text-slate-800 text-sm">{m.name}</h4>
+                              <p className="text-xs text-slate-500">{m.items.length} alimentos</p>
+                           </div> 
+                        ))}
+                     </div>
+                  ) : (
+                     <div className="space-y-4 animate-fade-in">
+                        <div className="p-4 bg-md-primary/10 rounded-xl border border-md-primary/20">
+                           <div className="flex justify-between items-center mb-3">
+                              <h4 className="font-semibold text-md-primary">{selectedMealObj.name}</h4>
+                              <button type="button" onClick={() => setSelectedMealObj(null)} className="text-xs text-md-primary underline">Voltar</button>
+                           </div>
+                           <ul className="space-y-1 text-xs text-slate-700">
+                              {selectedMealObj.items.map(i => <li key={i.id}>• {i.qty}{i.food.serving_unit} de {i.food.name}</li>)}
+                           </ul>
+                        </div>
+                        <button onClick={handleAddSavedMeal} className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-6 shadow-md hover:bg-opacity-90 transition">Adicionar ao Diário</button>
+                     </div>
+                  )}
+                </div>
+              )}
+
               {addMode === 'custom' && (
                 <form onSubmit={handleAddCustom} className="space-y-4">
                   <div><label className="text-xs font-medium text-slate-500 ml-1">Calorias (kcal)</label><input type="number" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
@@ -175,6 +208,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
                   <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-6 shadow-md hover:bg-opacity-90 transition">Salvar Entrada</button>
                 </form>
               )}
+
               {addMode === 'create' && (
                 <form onSubmit={handleCreateFood} className="space-y-4">
                   <div><label className="text-xs font-medium text-slate-500 ml-1">Nome do Alimento</label><input type="text" value={newFoodName} onChange={e=>setNewFoodName(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>

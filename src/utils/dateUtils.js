@@ -17,14 +17,10 @@ export const isYesterday = (dateObj) => {
 
 export const getDailyGoal = (settings, dateObj) => {
    if (!settings) return { calories: 2500, protein: 160, fat: 70, carbs: 300, water: 3000 };
-   // Retro-compatibilidade com bd antiga
    if (!settings.mode && settings.goals) return settings.goals;
-   
    if (settings.mode === 'custom' && settings.custom) {
        const day = dateObj.getDay().toString();
-       if (settings.custom[day] && settings.custom[day].calories > 0) {
-           return settings.custom[day];
-       }
+       if (settings.custom[day] && settings.custom[day].calories > 0) return settings.custom[day];
    }
    return settings.global || { calories: 2500, protein: 160, fat: 70, carbs: 300, water: 3000 };
 };

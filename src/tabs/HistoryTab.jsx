@@ -37,10 +37,7 @@ export default function HistoryTab({ selectedDate, setSelectedDate }) {
       const prot = log ? (log.total_protein || 0) : 0;
       const fat = log ? (log.total_fat || 0) : 0;
       const carbs = log ? (log.total_carbs || 0) : 0;
-      
-      // Calculate dynamic goal for that specific day
       const dGoal = getDailyGoal(rawSettings, d);
-      
       sumCal += cals; 
       days.push({ day: labels[i], calorias: cals, prot, fat, carbs, agua, metaKcal: dGoal.calories });
     }
@@ -61,9 +58,7 @@ export default function HistoryTab({ selectedDate, setSelectedDate }) {
       const prot = log ? (log.total_protein || 0) : 0;
       const fat = log ? (log.total_fat || 0) : 0;
       const carbs = log ? (log.total_carbs || 0) : 0;
-      
       const dGoal = getDailyGoal(rawSettings, d);
-
       sumCal += cals; 
       days.push({ day: String(i), calorias: cals, prot, fat, carbs, agua, metaKcal: dGoal.calories });
     }
