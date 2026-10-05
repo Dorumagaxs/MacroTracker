@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { db } from '../db';
 import { formatDateId, isToday, isYesterday, isTomorrow, getDailyGoal } from '../utils/dateUtils';
 import { addCustomEntry, deleteEntry, addFoodEntry, createNewFood, addWaterEntry, addSavedMealToDiary } from '../services/crud';
@@ -9,17 +10,19 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showWaterModal, setShowWaterModal] = useState(false);
   
-  const [addMode, setAddMode] = useState('catalog'); // catalog, meals, custom, create
+  const [addMode, setAddMode] = useState('catalog'); 
   const [mealName, setMealName] = useState('Almoço');
   
   const [cal, setCal] = useState(''); const [prot, setProt] = useState(''); const [fat, setFat] = useState(''); const [carb, setCarb] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFood, setSelectedFood] = useState(null);
   const [consumeQty, setConsumeQty] = useState('');
+  
   const [newFoodName, setNewFoodName] = useState('');
   const [baseServing, setBaseServing] = useState('100');
-  const [waterAmount, setWaterAmount] = useState('');
+  const [unit, setUnit] = useState('g');
   
+  const [waterAmount, setWaterAmount] = useState('');
   const [selectedMealObj, setSelectedMealObj] = useState(null);
 
   const targetDateStr = formatDateId(selectedDate);
@@ -45,9 +48,38 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
     }, {});
   }, [mealEntries]);
 
+  // Lógica de Reordenação
+  const orderedMealNames = useMemo(() => {
+      const dbOrder = rawSettings?.diaryMealOrder || [];
+      const currentGroups = Object.keys(groupedEntries);
+      const combined = [...new Set([...dbOrder, ...currentGroups])].filter(name => currentGroups.includes(name));
+      return combined;
+  }, [groupedEntries, rawSettings]);
+
+  const onDragEnd = async (result) => {
+      if (!result.destination) return;
+      const items = Array.from(orderedMealNames);
+      const [reorderedItem] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, reorderedItem);
+      
+      const currentOrder = rawSettings?.diaryMealOrder || [];
+      const allNames = [...new Set([...items, ...currentOrder])];
+      
+      const newSavedOrder = allNames.sort((a, b) => {
+          let iA = items.indexOf(a); if(iA===-1) iA=999;
+          let iB = items.indexOf(b); if(iB===-1) iB=999;
+          return iA - iB;
+      });
+      await db.settings.update(1, { diaryMealOrder: newSavedOrder });
+  };
+
   const handleAddCustom = async (e) => { e.preventDefault(); await addCustomEntry(mealName, cal, prot || 0, fat || 0, carb || 0, selectedDate); closeModal(); };
   const handleAddFromCatalog = async (e) => { e.preventDefault(); if(!selectedFood || !consumeQty) return; await addFoodEntry(mealName, selectedFood, consumeQty, selectedDate); closeModal(); };
-  const handleCreateFood = async (e) => { e.preventDefault(); const food = await createNewFood(newFoodName, baseServing, 'g', cal, prot||0, fat||0, carb||0); setSelectedFood(food); setAddMode('catalog'); setNewFoodName(''); };
+  const handleCreateFood = async (e) => { 
+      e.preventDefault(); 
+      const food = await createNewFood(newFoodName, baseServing, unit, cal, prot||0, fat||0, carb||0); 
+      setSelectedFood(food); setAddMode('catalog'); setNewFoodName(''); setUnit('g');
+  };
   const handleAddWater = async (e) => { e.preventDefault(); if(!waterAmount) return; await addWaterEntry(waterAmount, selectedDate); setShowWaterModal(false); setWaterAmount(''); };
   
   const handleAddSavedMeal = async () => {
@@ -56,12 +88,8 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
      closeModal();
   };
 
-  const closeModal = () => {
-    setShowAddModal(false); setSelectedFood(null); setSelectedMealObj(null); setConsumeQty(''); setCal(''); setProt(''); setFat(''); setCarb('');
-  };
-
+  const closeModal = () => { setShowAddModal(false); setSelectedFood(null); setSelectedMealObj(null); setConsumeQty(''); setCal(''); setProt(''); setFat(''); setCarb(''); };
   const calcPercent = (current, goal) => Math.min((current / goal) * 100, 100) || 0;
-  
   const handlePrev = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
   const handleNext = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
   const getLabel = () => { if(isToday(selectedDate)) return 'Hoje'; if(isYesterday(selectedDate)) return 'Ontem'; if(isTomorrow(selectedDate)) return 'Amanhã'; return selectedDate.toLocaleDateString('pt-BR'); };
@@ -89,32 +117,48 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
         </div>
       </div>
 
-      <div className="space-y-4">
-         {Object.entries(groupedEntries).map(([mName, entries]) => (
-           <div key={mName} className="bg-white rounded-[20px] shadow-sm border border-slate-100 overflow-hidden">
-              <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center">
-                 <h3 className="font-semibold text-slate-700">{mName}</h3>
-                 {mName !== 'Água' && <span className="text-sm font-medium text-md-primary">{entries.reduce((sum, e) => sum + e.calories, 0)} kcal</span>}
-              </div>
-              <div className="divide-y divide-slate-50">
-                 {entries.map(entry => (
-                   <div key={entry.id} className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-slate-800 text-sm">{entry.food_name} {entry.is_custom && !entry.is_water && <span className="text-[10px] text-md-primary bg-md-primary/10 px-2 py-0.5 rounded-full ml-2">Custom</span>}</p>
-                        {entry.is_water ? <p className="text-xs text-cyan-600 mt-0.5">{entry.water} ml de Água</p> : <p className="text-xs text-slate-500 mt-0.5">{entry.qty_consumed}{entry.serving_unit} • P: {entry.macros.protein}g • G: {entry.macros.fat}g • C: {entry.macros.carbs}g</p>}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {!entry.is_water && <span className="font-semibold text-slate-600 text-sm">{entry.calories} kcal</span>}
-                        <button onClick={() => deleteEntry(entry.id, targetDateStr)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
-                      </div>
-                   </div>
-                 ))}
-              </div>
-           </div>
-         ))}
-      </div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="diary-meals">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4">
+              {orderedMealNames.map((mName, index) => {
+                 const entries = groupedEntries[mName];
+                 return (
+                   <Draggable key={mName} draggableId={mName} index={index}>
+                     {(provided) => (
+                       <div ref={provided.innerRef} {...provided.draggableProps} className="bg-white rounded-[20px] shadow-sm border border-slate-100 overflow-hidden">
+                          <div {...provided.dragHandleProps} className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center cursor-grab active:cursor-grabbing">
+                             <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                                <span className="text-slate-400 cursor-grab">⋮⋮</span> {mName}
+                             </h3>
+                             {mName !== 'Água' && <span className="text-sm font-medium text-md-primary">{entries.reduce((sum, e) => sum + e.calories, 0)} kcal</span>}
+                          </div>
+                          <div className="divide-y divide-slate-50">
+                             {entries.map(entry => (
+                               <div key={entry.id} className="p-4 flex justify-between items-center">
+                                  <div>
+                                    <p className="font-medium text-slate-800 text-sm">{entry.food_name} {entry.is_custom && !entry.is_water && <span className="text-[10px] text-md-primary bg-md-primary/10 px-2 py-0.5 rounded-full ml-2">Custom</span>}</p>
+                                    {entry.is_water ? <p className="text-xs text-cyan-600 mt-0.5">{entry.water} ml de Água</p> : <p className="text-xs text-slate-500 mt-0.5">{entry.qty_consumed}{entry.serving_unit} • P: {entry.macros.protein}g • G: {entry.macros.fat}g • C: {entry.macros.carbs}g</p>}
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    {!entry.is_water && <span className="font-semibold text-slate-600 text-sm">{entry.calories} kcal</span>}
+                                    <button onClick={() => deleteEntry(entry.id, targetDateStr)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
+                                  </div>
+                               </div>
+                             ))}
+                          </div>
+                       </div>
+                     )}
+                   </Draggable>
+                 );
+              })}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
       
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-2">
         <button onClick={() => setShowAddModal(true)} className="flex-1 py-4 border-2 border-dashed border-slate-300 text-slate-500 rounded-[24px] font-medium hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
           <span className="text-xl leading-none">+</span> Alimento
         </button>
@@ -123,6 +167,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
         </button>
       </div>
 
+      {/* Modal Água */}
       {showWaterModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 pb-safe animate-slide-up">
@@ -136,6 +181,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
         </div>
       )}
 
+      {/* Modal Alimento */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md h-[85vh] sm:h-auto rounded-t-3xl sm:rounded-3xl flex flex-col animate-slide-up">
@@ -173,7 +219,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
                 <div className="space-y-4">
                   {!selectedMealObj ? (
                      <div className="space-y-2">
-                        {savedMeals.length === 0 ? <p className="text-center text-sm text-slate-400 py-4">Nenhuma refeição agrupada foi criada. Crie em "Ajustes".</p> : savedMeals.map(m => ( 
+                        {savedMeals.length === 0 ? <p className="text-center text-sm text-slate-400 py-4">Nenhuma refeição criada.</p> : savedMeals.map(m => ( 
                            <div key={m.id} onClick={() => setSelectedMealObj(m)} className="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition">
                               <h4 className="font-medium text-slate-800 text-sm">{m.name}</h4>
                               <p className="text-xs text-slate-500">{m.items.length} alimentos</p>
@@ -213,9 +259,16 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
                 <form onSubmit={handleCreateFood} className="space-y-4">
                   <div><label className="text-xs font-medium text-slate-500 ml-1">Nome do Alimento</label><input type="text" value={newFoodName} onChange={e=>setNewFoodName(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
                   <div className="grid grid-cols-2 gap-3">
-                     <div><label className="text-xs font-medium text-slate-500 ml-1">Porção (g/ml)</label><input type="number" value={baseServing} onChange={e=>setBaseServing(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
-                     <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><input type="number" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+                     <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><input type="number" value={baseServing} onChange={e=>setBaseServing(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+                     <div><label className="text-xs font-medium text-slate-500 ml-1">Unidade</label>
+                        <select value={unit} onChange={e=>setUnit(e.target.value)} className="w-full mt-1 bg-white border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md text-sm text-slate-700">
+                           <option value="g">gramas (g)</option>
+                           <option value="ml">mililitros (ml)</option>
+                           <option value="un">unidades (un)</option>
+                        </select>
+                     </div>
                   </div>
+                  <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><input type="number" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
                   <div className="grid grid-cols-3 gap-3">
                     <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><input type="number" value={prot} onChange={e=>setProt(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
                     <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><input type="number" value={fat} onChange={e=>setFat(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
