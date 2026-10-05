@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'generateSW',
       registerType: 'autoUpdate', // Atualiza o SW automaticamente quando houver novas versões
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
