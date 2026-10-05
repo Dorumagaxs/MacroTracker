@@ -83,9 +83,13 @@ export async function createNewFood(name, base_serving, unit, calories, protein,
   return newFood;
 }
 
+export async function updateFood(id, updatedData) { await db.foods.update(id, updatedData); }
 export async function deleteFood(id) { await db.foods.delete(id); }
+
 export async function createSavedMeal(name, items) { const newMeal = { id: crypto.randomUUID(), name, items }; await db.meals.add(newMeal); return newMeal; }
+export async function updateSavedMeal(id, name, items) { await db.meals.update(id, { name, items }); }
 export async function deleteSavedMeal(id) { await db.meals.delete(id); }
+
 export async function deleteEntry(id, date_id) { await db.meal_entries.delete(id); await recalculateDailyTotal(date_id); }
 
 export async function resetDiary() {

@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { createNewFood, deleteFood, createSavedMeal, deleteSavedMeal, resetDiary, resetCatalog } from '../services/crud';
+import { createNewFood, deleteFood, updateFood, createSavedMeal, deleteSavedMeal, updateSavedMeal, resetDiary, resetCatalog } from '../services/crud';
 import { exportData, importData } from '../services/backup';
 
 export default function SettingsTab() {
-  const [view, setView] = useState('menu'); // menu, goals, catalog, meals, backup, reset
+  const [view, setView] = useState('menu');
   
   const settings = useLiveQuery(() => db.settings.get(1));
   const foods = useLiveQuery(() => db.foods.toArray()) || [];
@@ -32,11 +32,11 @@ export default function SettingsTab() {
       </button>
       <button onClick={() => setView('catalog')} className="w-full bg-white p-5 rounded-[24px] shadow-sm border border-slate-100 text-left hover:bg-slate-50 transition">
         <h3 className="font-semibold text-slate-800 text-lg">🍎 Catálogo de Alimentos</h3>
-        <p className="text-sm text-slate-500 mt-1">Gerir, editar e criar alimentos individuais gravados.</p>
+        <p className="text-sm text-slate-500 mt-1">Procurar, editar e criar alimentos individuais gravados.</p>
       </button>
       <button onClick={() => setView('meals')} className="w-full bg-white p-5 rounded-[24px] shadow-sm border border-slate-100 text-left hover:bg-slate-50 transition">
         <h3 className="font-semibold text-slate-800 text-lg">🍱 Refeições Salvas</h3>
-        <p className="text-sm text-slate-500 mt-1">Criar conjuntos predefinidos de alimentos (ex: Pão com Ovos).</p>
+        <p className="text-sm text-slate-500 mt-1">Editar e gerir conjuntos predefinidos de alimentos.</p>
       </button>
       <button onClick={() => setView('backup')} className="w-full bg-white p-5 rounded-[24px] shadow-sm border border-slate-100 text-left hover:bg-slate-50 transition">
         <h3 className="font-semibold text-slate-800 text-lg">💾 Backup de Dados</h3>
@@ -110,33 +110,145 @@ export default function SettingsTab() {
   );
 }
 
-// Goals Manager
+// Goals Manager com Nomenclatura "Geral" e Botão de Exclusão Individual (X)
 function GoalsManager({ settings }) {
   if(!settings) return <p>Carregando...</p>;
   const st = { mode: settings.mode || 'global', global: settings.global || settings.goals || { calories: 2500, protein: 160, fat: 70, carbs: 300, water: 3000 }, custom: settings.custom || { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} } };
+  
   const [mode, setMode] = useState(st.mode);
-  const [activeDay, setActiveDay] = useState('1'); 
-  const [formData, setFormData] = useState(mode === 'global' ? st.global : (st.custom[activeDay] || st.global));
+  const [activeDays, setActiveDays] = useState(['1']); 
+  const [formData, setFormData] = useState(mode === 'global' ? st.global : (st.custom[activeDays[0]]?.calories ? st.custom[activeDays[0]] : st.global));
+  
   const daysMap = { '0': 'Domingo', '1': 'Segunda', '2': 'Terça', '3': 'Quarta', '4': 'Quinta', '5': 'Sexta', '6': 'Sábado' };
-  const handleModeSwitch = async (newMode) => { setMode(newMode); setFormData(newMode === 'global' ? st.global : (st.custom[activeDay].calories ? st.custom[activeDay] : st.global)); await db.settings.update(1, { mode: newMode }); };
-  const handleDaySwitch = (day) => { setActiveDay(day); setFormData(st.custom[day].calories ? st.custom[day] : st.global); };
+  const daysShortMap = { '0': 'Dom', '1': 'Seg', '2': 'Ter', '3': 'Qua', '4': 'Qui', '5': 'Sex', '6': 'Sáb' };
+
+  const handleModeSwitch = async (newMode) => { 
+    setMode(newMode); 
+    setFormData(newMode === 'global' ? st.global : (st.custom[activeDays[0]]?.calories ? st.custom[activeDays[0]] : st.global)); 
+    await db.settings.update(1, { mode: newMode }); 
+  };
+
+  const toggleDay = (day) => {
+    let newDays = [...activeDays];
+    if(newDays.includes(day)) {
+       newDays = newDays.filter(d => d !== day);
+       if(newDays.length === 0) newDays = [day];
+    } else {
+       newDays.push(day);
+    }
+    setActiveDays(newDays);
+    setFormData(st.custom[newDays[0]]?.calories ? st.custom[newDays[0]] : st.global);
+  };
+
+  const handleResetToGlobal = async () => {
+     if(window.confirm("Deseja apagar as metas específicas e usar a meta geral para todos os dias?")) {
+         const payload = { mode: 'custom', custom: { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} } };
+         await db.settings.update(1, payload);
+         alert("Todas as metas diárias foram resetadas!");
+     }
+  };
+
+  const handleClearSingleDay = async (e, dKey) => {
+     e.stopPropagation();
+     if(window.confirm(`Deseja remover a meta personalizada de ${daysMap[dKey]}? O dia voltará a usar a meta Geral.`)) {
+         const newCustom = { ...st.custom };
+         newCustom[dKey] = {};
+         await db.settings.update(1, { custom: newCustom });
+     }
+  };
+
   const handleChange = (e) => setFormData({...formData, [e.target.name]: Number(e.target.value)});
-  const handleSave = async (e) => { e.preventDefault(); const payload = mode === 'global' ? { mode: 'global', global: formData } : { mode: 'custom', custom: { ...st.custom, [activeDay]: formData } }; await db.settings.update(1, payload); alert('Metas atualizadas!'); };
+
+  const handleSave = async (e) => { 
+    e.preventDefault(); 
+    if (mode === 'global') {
+        await db.settings.update(1, { mode: 'global', global: formData });
+    } else {
+        const newCustom = { ...st.custom };
+        activeDays.forEach(d => newCustom[d] = formData);
+        await db.settings.update(1, { mode: 'custom', custom: newCustom });
+    }
+    alert('Metas atualizadas com sucesso!'); 
+  };
+
   return (
-    <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
-       <h3 className="font-semibold text-slate-800 text-lg mb-4">Configurar Metas</h3>
-       <div className="flex bg-slate-100 rounded-full p-1 mb-5"><button onClick={() => handleModeSwitch('global')} className={`flex-1 py-1.5 text-sm font-medium rounded-full ${mode === 'global' ? 'bg-white shadow-sm text-md-primary' : 'text-slate-500'}`}>Única (Geral)</button><button onClick={() => handleModeSwitch('custom')} className={`flex-1 py-1.5 text-sm font-medium rounded-full ${mode === 'custom' ? 'bg-white shadow-sm text-md-primary' : 'text-slate-500'}`}>Por Dia</button></div>
-       {mode === 'custom' && <div className="flex overflow-x-auto gap-2 pb-2 mb-4 scrollbar-hide">{Object.keys(daysMap).map(d => <button key={d} onClick={() => handleDaySwitch(d)} className={`px-4 py-1.5 rounded-lg text-xs font-medium shrink-0 ${activeDay === d ? 'bg-md-primary text-white' : 'bg-slate-100 text-slate-600'}`}>{daysMap[d]}</button>)}</div>}
-       <form onSubmit={handleSave} className="space-y-4">
-          <div><label className="text-xs font-medium text-slate-500 ml-1">Calorias (kcal)</label><input type="number" name="calories" value={formData.calories||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
-          <div className="grid grid-cols-3 gap-3">
-             <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><input type="number" name="protein" value={formData.protein||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
-             <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><input type="number" name="fat" value={formData.fat||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
-             <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><input type="number" name="carbs" value={formData.carbs||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
+    <div className="space-y-6">
+       <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
+          <h3 className="font-semibold text-slate-800 text-lg mb-4">Configurar Metas</h3>
+          
+          <div className="flex bg-slate-100 rounded-full p-1 mb-5">
+            <button onClick={() => handleModeSwitch('global')} className={`flex-1 py-1.5 text-sm font-medium rounded-full ${mode === 'global' ? 'bg-white shadow-sm text-md-primary' : 'text-slate-500'}`}>Geral</button>
+            <button onClick={() => handleModeSwitch('custom')} className={`flex-1 py-1.5 text-sm font-medium rounded-full ${mode === 'custom' ? 'bg-white shadow-sm text-md-primary' : 'text-slate-500'}`}>Por Dia</button>
           </div>
-          <div><label className="text-xs font-medium text-slate-500 ml-1">Água (ml)</label><input type="number" name="water" value={formData.water||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-3 py-2 outline-none rounded-t-md" /></div>
-          <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-2 shadow-md hover:bg-opacity-90 transition">Gravar Meta</button>
-       </form>
+          
+          {mode === 'custom' && (
+            <div className="mb-4">
+              <p className="text-xs text-slate-500 mb-2">Selecione um ou mais dias para aplicar a mesma meta:</p>
+              <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
+                {Object.keys(daysShortMap).map(d => (
+                  <button key={d} onClick={() => toggleDay(d)} className={`px-4 py-1.5 rounded-lg text-xs font-medium shrink-0 transition-colors ${activeDays.includes(d) ? 'bg-md-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600'}`}>{daysShortMap[d]}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSave} className="space-y-4">
+             <div><label className="text-xs font-medium text-slate-500 ml-1">Calorias (kcal)</label><input type="number" name="calories" value={formData.calories||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+             <div className="grid grid-cols-3 gap-3">
+                <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><input type="number" name="protein" value={formData.protein||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><input type="number" name="fat" value={formData.fat||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><input type="number" name="carbs" value={formData.carbs||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
+             </div>
+             <div><label className="text-xs font-medium text-slate-500 ml-1">Água (ml)</label><input type="number" name="water" value={formData.water||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-3 py-2 outline-none rounded-t-md" /></div>
+             <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-2 shadow-md hover:bg-opacity-90 transition">Gravar Meta</button>
+          </form>
+
+          {mode === 'custom' && (
+              <div className="mt-6 pt-4 border-t border-slate-100">
+                  <button onClick={handleResetToGlobal} className="w-full bg-slate-100 text-slate-600 py-2.5 rounded-full text-sm font-medium hover:bg-slate-200 transition">Reverter todas para a Meta Geral</button>
+              </div>
+          )}
+       </div>
+
+       {/* --- LISTA DE METAS VIGENTES (com botão X de exclusão individual) --- */}
+       <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
+          <h3 className="font-semibold text-slate-800 text-base mb-3">📋 Metas Vigentes Atuais</h3>
+          
+          {st.mode === 'global' ? (
+             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm space-y-1">
+                <p className="font-semibold text-md-primary">Modo Geral (Aplicado a todos os dias)</p>
+                <p className="text-slate-600">🔥 <b>{st.global.calories} kcal</b> | 💧 <b>{st.global.water || 3000} ml</b></p>
+                <p className="text-xs text-slate-500">P: {st.global.protein || 0}g • G: {st.global.fat || 0}g • C: {st.global.carbs || 0}g</p>
+             </div>
+          ) : (
+             <div className="space-y-2">
+                {Object.keys(daysMap).map(dKey => {
+                   const hasCustom = (st.custom[dKey] && Number(st.custom[dKey].calories) > 0);
+                   const dayGoal = hasCustom ? st.custom[dKey] : st.global;
+                   return (
+                      <div key={dKey} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center text-xs">
+                         <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-800">{daysMap[dKey]}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${hasCustom ? 'bg-md-primary/10 text-md-primary font-medium' : 'bg-slate-200 text-slate-500'}`}>
+                               {hasCustom ? 'Personalizado' : 'Geral (Padrão)'}
+                            </span>
+                         </div>
+                         <div className="flex items-center gap-3">
+                            <div className="text-right text-slate-600">
+                               <span className="font-bold text-slate-800">{dayGoal.calories} kcal</span> • 💧 {dayGoal.water || 3000}ml
+                            </div>
+                            {hasCustom && (
+                               <button onClick={(e) => handleClearSingleDay(e, dKey)} title="Remover meta personalizada deste dia" className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 rounded-full font-bold transition-colors">
+                                  &times;
+                               </button>
+                            )}
+                         </div>
+                      </div>
+                   );
+                })}
+             </div>
+          )}
+       </div>
     </div>
   );
 }
@@ -144,21 +256,58 @@ function GoalsManager({ settings }) {
 // Catalog Manager
 function CatalogManager({ foods }) {
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [newFood, setNewFood] = useState({ name: '', base: '100', unit: 'g', cal: '', prot: '', fat: '', carb: '' });
 
-  const handleDelete = async (id) => { if(window.confirm("Apagar este alimento do catálogo?")) await deleteFood(id); };
-  const handleCreate = async (e) => {
+  const sortedFoods = useMemo(() => {
+     return foods
+       .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+       .sort((a,b) => a.name.localeCompare(b.name));
+  }, [foods, searchTerm]);
+
+  const handleDelete = async (e, id) => { 
+     e.stopPropagation();
+     if(window.confirm("Apagar este alimento do catálogo?")) await deleteFood(id); 
+  };
+
+  const handleEditClick = (f) => {
+     setEditingId(f.id);
+     setNewFood({ name: f.name, base: f.base_serving, unit: f.serving_unit, cal: f.calories, prot: f.macros.protein, fat: f.macros.fat, carb: f.macros.carbs });
+     setShowForm(true);
+  };
+
+  const handleCancel = () => {
+     setEditingId(null);
+     setNewFood({ name: '', base: '100', unit: 'g', cal: '', prot: '', fat: '', carb: '' });
+     setShowForm(false);
+  }
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    await createNewFood(newFood.name, newFood.base, newFood.unit, newFood.cal, newFood.prot||0, newFood.fat||0, newFood.carb||0);
-    setNewFood({ name: '', base: '100', unit: 'g', cal: '', prot: '', fat: '', carb: '' });
-    setShowForm(false);
+    if(editingId) {
+        await updateFood(editingId, { 
+            name: newFood.name, base_serving: Number(newFood.base), serving_unit: newFood.unit, 
+            calories: Number(newFood.cal), macros: { protein: Number(newFood.prot||0), fat: Number(newFood.fat||0), carbs: Number(newFood.carb||0) } 
+        });
+    } else {
+        await createNewFood(newFood.name, newFood.base, newFood.unit, newFood.cal, newFood.prot||0, newFood.fat||0, newFood.carb||0);
+    }
+    handleCancel();
   };
 
   return (
     <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
-       <div className="flex justify-between items-center mb-4"><h3 className="font-semibold text-slate-800 text-lg">Catálogo</h3><button onClick={() => setShowForm(!showForm)} className="text-sm bg-md-primary/10 text-md-primary px-3 py-1 rounded-full font-medium">{showForm ? 'Cancelar' : '+ Novo Alimento'}</button></div>
+       <div className="flex justify-between items-center mb-4">
+           <h3 className="font-semibold text-slate-800 text-lg">Catálogo</h3>
+           <button onClick={() => showForm ? handleCancel() : setShowForm(true)} className="text-sm bg-md-primary/10 text-md-primary px-3 py-1 rounded-full font-medium">
+             {showForm ? 'Cancelar' : '+ Novo Alimento'}
+           </button>
+       </div>
+
        {showForm && (
-         <form onSubmit={handleCreate} className="space-y-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+         <form onSubmit={handleSave} className="space-y-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+            <h4 className="font-semibold text-slate-700 mb-2">{editingId ? 'Editar Alimento' : 'Novo Alimento'}</h4>
             <div><label className="text-xs font-medium text-slate-500 ml-1">Nome</label><input type="text" value={newFood.name} onChange={e=>setNewFood({...newFood, name: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
             <div className="grid grid-cols-2 gap-3">
                <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><input type="number" value={newFood.base} onChange={e=>setNewFood({...newFood, base: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
@@ -170,39 +319,119 @@ function CatalogManager({ foods }) {
                <div><label className="text-xs font-medium text-slate-500 ml-1">Gord</label><input type="number" value={newFood.fat} onChange={e=>setNewFood({...newFood, fat: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-amber-500 px-3 py-2 outline-none rounded-md" /></div>
                <div><label className="text-xs font-medium text-slate-500 ml-1">Carb</label><input type="number" value={newFood.carb} onChange={e=>setNewFood({...newFood, carb: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-purple-500 px-3 py-2 outline-none rounded-md" /></div>
             </div>
-            <button type="submit" className="w-full bg-md-primary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition">Gravar Alimento</button>
+            <button type="submit" className="w-full bg-md-tertiary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition">{editingId ? 'Guardar Alterações' : 'Gravar Alimento'}</button>
          </form>
        )}
-       <div className="space-y-3">
-         {foods.length === 0 && <p className="text-sm text-slate-400">Catálogo vazio.</p>}
-         {foods.map(f => (
-           <div key={f.id} className="p-4 border border-slate-100 rounded-xl"><div className="flex justify-between items-start mb-2"><h4 className="font-medium text-slate-800 text-sm leading-tight">{f.name}</h4><button onClick={() => handleDelete(f.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button></div><p className="text-xs text-slate-500 mb-1">{f.calories} kcal / {f.base_serving}{f.serving_unit}</p><div className="flex gap-2 text-[10px] text-slate-400"><span>P: {f.macros.protein}g</span>•<span>G: {f.macros.fat}g</span>•<span>C: {f.macros.carbs}g</span></div></div>
+
+       {!showForm && (
+         <div className="mb-4">
+             <input type="text" placeholder="Procurar alimentos..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
+         </div>
+       )}
+
+       <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+         {sortedFoods.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Nenhum alimento encontrado.</p>}
+         {sortedFoods.map(f => (
+           <div key={f.id} onClick={() => handleEditClick(f)} className="p-4 border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors group">
+             <div className="flex justify-between items-start mb-2">
+               <h4 className="font-medium text-slate-800 text-sm leading-tight group-hover:text-md-primary">{f.name} <span className="text-[10px] text-slate-400 font-normal ml-1">(Editar)</span></h4>
+               <button onClick={(e) => handleDelete(e, f.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
+             </div>
+             <p className="text-xs text-slate-500 mb-1">{f.calories} kcal / {f.base_serving}{f.serving_unit}</p>
+             <div className="flex gap-2 text-[10px] text-slate-400">
+               <span>P: {f.macros.protein}g</span>•<span>G: {f.macros.fat}g</span>•<span>C: {f.macros.carbs}g</span>
+             </div>
+           </div>
          ))}
        </div>
     </div>
   );
 }
 
-// Meals Manager (unchanged)
+// Meals Manager
 function MealsManager({ meals, foods }) {
-  const [creating, setCreating] = useState(false); const [mealName, setMealName] = useState(''); const [items, setItems] = useState([]); const [searchTerm, setSearchTerm] = useState(''); const [selectedFood, setSelectedFood] = useState(null); const [qty, setQty] = useState('');
-  const filteredFoods = foods.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 5);
-  const handleAddItem = (e) => { e.preventDefault(); if(!selectedFood || !qty) return; setItems([...items, { food: selectedFood, qty: Number(qty), id: crypto.randomUUID() }]); setSelectedFood(null); setSearchTerm(''); setQty(''); };
-  const handleSaveMeal = async () => { if(!mealName || items.length === 0) return alert('Dê um nome e adicione itens.'); await createSavedMeal(mealName, items); setCreating(false); setMealName(''); setItems([]); };
-  const handleDelete = async (id) => { if(window.confirm("Apagar esta refeição?")) await deleteSavedMeal(id); };
+  const [creating, setCreating] = useState(false); 
+  const [editingId, setEditingId] = useState(null);
+  const [mealName, setMealName] = useState(''); 
+  const [items, setItems] = useState([]); 
+  
+  const [searchTermMeals, setSearchTermMeals] = useState('');
+  const [searchTermFoods, setSearchTermFoods] = useState(''); 
+  const [selectedFood, setSelectedFood] = useState(null); 
+  const [qty, setQty] = useState('');
+
+  const sortedMeals = useMemo(() => meals.filter(m => m.name.toLowerCase().includes(searchTermMeals.toLowerCase())).sort((a,b) => a.name.localeCompare(b.name)), [meals, searchTermMeals]);
+  const filteredFoods = foods.filter(f => f.name.toLowerCase().includes(searchTermFoods.toLowerCase())).slice(0, 5);
+
+  const handleAddItem = (e) => { 
+      e.preventDefault(); 
+      if(!selectedFood || !qty) return; 
+      setItems([...items, { food: selectedFood, qty: Number(qty), id: crypto.randomUUID() }]); 
+      setSelectedFood(null); setSearchTermFoods(''); setQty(''); 
+  };
+  
+  const handleEditClick = (m) => {
+     setEditingId(m.id); setMealName(m.name); setItems(m.items); setCreating(true);
+  };
+
+  const handleCancel = () => { setCreating(false); setEditingId(null); setMealName(''); setItems([]); };
+
+  const handleSaveMeal = async () => { 
+      if(!mealName || items.length === 0) return alert('Dê um nome e adicione itens.'); 
+      if(editingId) {
+          await updateSavedMeal(editingId, mealName, items);
+      } else {
+          await createSavedMeal(mealName, items); 
+      }
+      handleCancel();
+  };
+  
+  const handleDelete = async (e, id) => { 
+      e.stopPropagation();
+      if(window.confirm("Apagar esta refeição?")) await deleteSavedMeal(id); 
+  };
 
   return (
     <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
-       <div className="flex justify-between items-center mb-4"><h3 className="font-semibold text-slate-800 text-lg">Refeições Salvas</h3><button onClick={() => {setCreating(!creating); setItems([]); setMealName('');}} className="text-sm bg-md-primary/10 text-md-primary px-3 py-1 rounded-full font-medium">{creating ? 'Cancelar' : '+ Nova Refeição'}</button></div>
+       <div className="flex justify-between items-center mb-4">
+           <h3 className="font-semibold text-slate-800 text-lg">Refeições</h3>
+           <button onClick={() => creating ? handleCancel() : setCreating(true)} className="text-sm bg-md-primary/10 text-md-primary px-3 py-1 rounded-full font-medium">
+              {creating ? 'Cancelar' : '+ Nova Refeição'}
+           </button>
+       </div>
+       
        {creating && (
          <div className="space-y-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+            <h4 className="font-semibold text-slate-700 mb-2">{editingId ? 'Editar Refeição' : 'Criar Refeição'}</h4>
             <div><label className="text-xs font-medium text-slate-500 ml-1">Nome da Refeição</label><input type="text" placeholder="Ex: Pão com Ovos" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
-            <div className="border-t border-slate-200 pt-4"><p className="text-xs font-medium text-slate-500 mb-2">Adicionar Alimentos:</p>{!selectedFood ? <><input type="text" placeholder="Buscar alimento..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-white border border-slate-200 px-3 py-2 rounded-md outline-none focus:border-md-primary text-sm" />{searchTerm && <div className="mt-2 space-y-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm max-h-40 overflow-y-auto">{filteredFoods.map(f => <div key={f.id} onClick={()=>setSelectedFood(f)} className="p-2 hover:bg-slate-50 cursor-pointer rounded text-sm text-slate-700">{f.name}</div>)}</div>}</> : <form onSubmit={handleAddItem} className="flex gap-2"><div className="flex-1"><span className="text-xs text-slate-500 block truncate">{selectedFood.name}</span><input type="number" placeholder={`Qtd (${selectedFood.serving_unit})`} value={qty} onChange={e=>setQty(e.target.value)} className="w-full bg-white border border-slate-200 px-2 py-1.5 rounded-md outline-none text-sm" autoFocus required /></div><button type="submit" className="self-end bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium">Add</button><button type="button" onClick={()=>setSelectedFood(null)} className="self-end bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-medium">X</button></form>}</div>
+            <div className="border-t border-slate-200 pt-4"><p className="text-xs font-medium text-slate-500 mb-2">Adicionar Alimentos:</p>{!selectedFood ? <><input type="text" placeholder="Buscar alimento..." value={searchTermFoods} onChange={e=>setSearchTermFoods(e.target.value)} className="w-full bg-white border border-slate-200 px-3 py-2 rounded-md outline-none focus:border-md-primary text-sm" />{searchTermFoods && <div className="mt-2 space-y-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm max-h-40 overflow-y-auto">{filteredFoods.map(f => <div key={f.id} onClick={()=>setSelectedFood(f)} className="p-2 hover:bg-slate-50 cursor-pointer rounded text-sm text-slate-700">{f.name}</div>)}</div>}</> : <form onSubmit={handleAddItem} className="flex gap-2"><div className="flex-1"><span className="text-xs text-slate-500 block truncate">{selectedFood.name}</span><input type="number" placeholder={`Qtd (${selectedFood.serving_unit})`} value={qty} onChange={e=>setQty(e.target.value)} className="w-full bg-white border border-slate-200 px-2 py-1.5 rounded-md outline-none text-sm" autoFocus required /></div><button type="submit" className="self-end bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium">Add</button><button type="button" onClick={()=>setSelectedFood(null)} className="self-end bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-medium">X</button></form>}</div>
             {items.length > 0 && <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2"><p className="text-xs font-semibold text-slate-600 border-b border-slate-100 pb-1">Itens incluídos:</p>{items.map(it => <div key={it.id} className="flex justify-between items-center text-sm"><span className="text-slate-700 truncate">{it.qty}{it.food.serving_unit} {it.food.name}</span><button onClick={()=>setItems(items.filter(x=>x.id!==it.id))} className="text-red-400 font-bold ml-2">X</button></div>)}</div>}
-            <button onClick={handleSaveMeal} className="w-full bg-md-primary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition mt-2">Gravar Refeição</button>
+            <button onClick={handleSaveMeal} className="w-full bg-md-primary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition mt-2">{editingId ? 'Guardar Alterações' : 'Gravar Refeição'}</button>
          </div>
        )}
-       {!creating && <div className="space-y-3">{meals.length === 0 && <p className="text-sm text-slate-400">Nenhuma refeição salva.</p>}{meals.map(m => <div key={m.id} className="p-4 border border-slate-100 rounded-xl"><div className="flex justify-between items-start mb-2"><h4 className="font-medium text-slate-800 text-sm leading-tight">{m.name}</h4><button onClick={() => handleDelete(m.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button></div><p className="text-xs text-slate-500 mb-1">{m.items.length} alimentos agrupados</p><div className="flex flex-wrap gap-1 mt-2">{m.items.map(i => <span key={i.id} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{i.food.name}</span>)}</div></div>)}</div>}
+
+       {!creating && (
+         <>
+             <div className="mb-4">
+                 <input type="text" placeholder="Procurar refeição..." value={searchTermMeals} onChange={e=>setSearchTermMeals(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
+             </div>
+             <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+               {sortedMeals.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Nenhuma refeição encontrada.</p>}
+               {sortedMeals.map(m => (
+                 <div key={m.id} onClick={() => handleEditClick(m)} className="p-4 border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors group">
+                   <div className="flex justify-between items-start mb-2">
+                     <h4 className="font-medium text-slate-800 text-sm leading-tight group-hover:text-md-primary">{m.name} <span className="text-[10px] text-slate-400 font-normal ml-1">(Editar)</span></h4>
+                     <button onClick={(e) => handleDelete(e, m.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
+                   </div>
+                   <p className="text-xs text-slate-500 mb-1">{m.items.length} alimentos agrupados</p>
+                   <div className="flex flex-wrap gap-1 mt-2">
+                      {m.items.map(i => <span key={i.id} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{i.food.name}</span>)}
+                   </div>
+                 </div>
+               ))}
+             </div>
+         </>
+       )}
     </div>
   );
 }

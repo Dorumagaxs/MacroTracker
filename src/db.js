@@ -8,7 +8,7 @@ const defaultGoals = { calories: 2500, protein: 160, fat: 70, carbs: 300, water:
 db.on('populate', () => {
   db.settings.add({ 
     id: 1, mode: 'global', diaryMealOrder: [], global: defaultGoals, 
-    custom: { '0':{...defaultGoals}, '1':{...defaultGoals}, '2':{...defaultGoals}, '3':{...defaultGoals}, '4':{...defaultGoals}, '5':{...defaultGoals}, '6':{...defaultGoals} }
+    custom: { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} }
   });
   db.foods.bulkAdd([
     { id: crypto.randomUUID(), name: 'Arroz Branco Cozido', base_serving: 100, serving_unit: 'g', calories: 130, macros: { protein: 2.7, fat: 0.2, carbs: 28 } },

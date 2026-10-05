@@ -111,6 +111,7 @@ export default function HistoryTab({ selectedDate, setSelectedDate }) {
           <p className="text-xs text-amber-600">Gorduras: {data.fat}g</p>
           <p className="text-xs text-purple-600 mb-2">Carboidratos: {data.carbs}g</p>
           <p className="text-cyan-600 pt-2 border-t border-slate-100">Água: <span className="font-bold">{data.agua} ml</span></p>
+          {data.media > 0 && <p className="text-amber-500 text-xs mt-1">Média do Período: {data.media} kcal</p>}
         </div>
       );
     }
@@ -167,7 +168,7 @@ export default function HistoryTab({ selectedDate, setSelectedDate }) {
         {(view === 'weekly' || view === 'monthly') && (
           <>
             <div className="mb-6">
-              <p className="text-xs text-slate-500 text-center">Média Calórica: <span className="font-medium text-red-500">{view === 'weekly' ? weekData[0]?.media : monthData[0]?.media} kcal/dia</span></p>
+              <p className="text-xs text-slate-500 text-center">Média Calórica do Período: <span className="font-medium text-amber-500">{view === 'weekly' ? weekData[0]?.media : monthData[0]?.media} kcal/dia</span></p>
             </div>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -176,8 +177,15 @@ export default function HistoryTab({ selectedDate, setSelectedDate }) {
                   <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
                   <Tooltip content={<CustomTooltip />} cursor={{fill: '#f1f5f9'}} />
                   <Bar yAxisId="left" dataKey="calorias" fill="#386a20" radius={[4,4,0,0]} maxBarSize={40} />
-                  <Line yAxisId="left" type="monotone" dataKey="agua" stroke="#0ea5e9" strokeWidth={3} dot={false} />
+                  
+                  {/* Linha de Meta (Tracejada Vermelha) */}
                   <Line yAxisId="left" type="monotone" dataKey="metaKcal" stroke="#ba1a1a" strokeWidth={2} dot={false} strokeDasharray="4 4" />
+                  
+                  {/* Linha de Água (Azul) */}
+                  <Line yAxisId="left" type="monotone" dataKey="agua" stroke="#0ea5e9" strokeWidth={3} dot={false} />
+                  
+                  {/* NOVA Linha de Média (Âmbar/Laranja Contínua) */}
+                  <Line yAxisId="left" type="monotone" dataKey="media" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
