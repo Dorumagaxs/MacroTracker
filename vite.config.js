@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/MacroTracker/',
   plugins: [
     react(),
     VitePWA({
@@ -13,6 +14,8 @@ export default defineConfig({
         short_name: 'MacroTracker',
         description: 'Seu rastreador de macros',
         theme_color: '#ffffff',
+        start_url: '/MacroTracker/',
+        scope: '/MacroTracker/',
         icons: [
           {
             src: 'pwa-192x192.png',
