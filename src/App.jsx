@@ -19,7 +19,6 @@ export default function App() {
         {activeTab === 'settings' && <SettingsTab />}
       </main>
 
-      {/* Nav Inferior */}
       <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-200 flex justify-around p-3 pb-safe z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <button onClick={() => setActiveTab('diary')} className={`px-5 py-1.5 rounded-full text-sm font-medium transition-colors ${activeTab === 'diary' ? 'bg-md-primary/15 text-md-primary' : 'text-slate-500'}`}>Diário</button>
         <button onClick={() => setActiveTab('history')} className={`px-5 py-1.5 rounded-full text-sm font-medium transition-colors ${activeTab === 'history' ? 'bg-md-primary/15 text-md-primary' : 'text-slate-500'}`}>Histórico</button>
