@@ -14,7 +14,6 @@ export default function SwipeNumberInput({ value, onChange, label, colorClass })
   const handleTouchMove = (e) => {
     if (!isDragging) return;
     const deltaY = startY.current - e.touches[0].clientY;
-    // Rolagem: a cada ~5 pixels altera 1 unidade
     const newVal = Math.max(0, startVal.current + Math.round(deltaY / 4));
     onChange(newVal);
   };

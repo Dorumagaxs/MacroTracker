@@ -9,7 +9,6 @@ import { fmt, getMealMacros } from '../utils/formatUtils';
 
 const MySwal = withReactContent(Swal);
 
-// --- COMPONENTE DE ROLAGEM DE NÚMERO ---
 function SwipeNumberInput({ value, onChange, label, colorClass }) {
   const [isDragging, setIsDragging] = useState(false);
   const startY = useRef(0);
@@ -253,7 +252,6 @@ function GoalsManager({ settings }) {
      });
   };
 
-  // Atualiza campo numérico por rolagem
   const handleMacroChange = (field, val) => {
      const newForm = { ...formData, [field]: val };
      newForm.calories = (newForm.protein * 4) + (newForm.fat * 9) + (newForm.carbs * 4);
@@ -533,7 +531,10 @@ function MealsManager({ meals, foods }) {
             {items.length > 0 && <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
                <p className="text-xs font-semibold text-slate-600 border-b border-slate-100 pb-1">Itens incluídos:</p>
                {items.map(it => <div key={it.id} className="flex justify-between items-center text-sm"><span className="text-slate-700 truncate">{it.qty}{it.food.serving_unit} {it.food.name}</span><button onClick={()=>setItems(items.filter(x=>x.id!==it.id))} className="text-red-400 font-bold ml-2">X</button></div>)}
-               <div className="pt-2 border-t border-slate-100 text-right"><span className="text-xs font-semibold text-md-primary">Total: {getMealMacros(items).cal} kcal</span></div>
+               <div className="pt-2 border-t border-slate-100 text-right">
+                  <span className="text-xs font-semibold text-md-primary block">Total: {getMealMacros(items).cal} kcal</span>
+                  <span className="text-[10px] text-slate-500">P: {getMealMacros(items).p}g • G: {getMealMacros(items).f}g • C: {getMealMacros(items).c}g</span>
+               </div>
             </div>}
             <button onClick={handleSaveMeal} className="w-full bg-md-primary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition mt-2">{editingId ? 'Guardar Alterações' : 'Gravar Refeição'}</button>
          </div>
@@ -555,6 +556,7 @@ function MealsManager({ meals, foods }) {
                      <button onClick={(e) => handleDelete(e, m.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
                    </div>
                    <p className="text-xs text-slate-500 mb-1">{m.items.length} alimentos • <span className="font-semibold text-slate-700">{mt.cal} kcal</span></p>
+                   <p className="text-[10px] text-slate-400 mb-2">P: {mt.p}g • G: {mt.f}g • C: {mt.c}g</p>
                    <div className="flex flex-wrap gap-1 mt-2">
                       {m.items.map(i => <span key={i.id} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{i.food.name}</span>)}
                    </div>

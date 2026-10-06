@@ -2,7 +2,6 @@
 export const fmt = (val) => {
     const v = Number(val);
     if (isNaN(v)) return '0';
-    // Arredonda para 1 casa decimal e remove o .0 se for inteiro
     return v.toFixed(1).replace(/\.0$/, '');
 };
 

@@ -10,10 +10,4 @@ db.on('populate', () => {
     id: 1, mode: 'global', diaryMealOrder: [], global: defaultGoals, 
     custom: { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} }
   });
-  db.foods.bulkAdd([
-    { id: crypto.randomUUID(), name: 'Arroz Branco Cozido', base_serving: 100, serving_unit: 'g', calories: 130, macros: { protein: 2.7, fat: 0.2, carbs: 28 } },
-    { id: crypto.randomUUID(), name: 'Peito de Frango Grelhado', base_serving: 100, serving_unit: 'g', calories: 165, macros: { protein: 31, fat: 3.6, carbs: 0 } },
-    { id: crypto.randomUUID(), name: 'Ovo de Galinha Cozido', base_serving: 50, serving_unit: 'g', calories: 77, macros: { protein: 6.3, fat: 5.3, carbs: 0.6 } },
-    { id: crypto.randomUUID(), name: 'Pão Francês', base_serving: 50, serving_unit: 'g', calories: 150, macros: { protein: 4.5, fat: 1.5, carbs: 29 } }
-  ]);
 });
