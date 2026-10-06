@@ -1,13 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
+import path from 'path'
 
 export default defineConfig({
   base: '/MacroTracker/',
   plugins: [
     react(),
     VitePWA({
-      strategies: 'generateSW',
       registerType: 'autoUpdate', // Atualiza o SW automaticamente quando houver novas versões
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
@@ -19,17 +20,31 @@ export default defineConfig({
         scope: '/MacroTracker/',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           }
         ]
       }
-    })
+    }),
+    {
+      name: 'force-manifest-json-copy',
+      closeBundle() {
+        const distDir = path.resolve(__dirname, 'dist')
+        const webmanifestPath = path.join(distDir, 'manifest.webmanifest')
+        const jsonPath = path.join(distDir, 'manifest.json')
+        
+        if (fs.existsSync(webmanifestPath)) {
+          fs.copyFileSync(webmanifestPath, jsonPath)
+        }
+      }
+    }
   ]
 })
