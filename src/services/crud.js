@@ -40,11 +40,11 @@ export async function addFoodEntry(meal_name, food, qty_consumed, dateObj) {
   await db.meal_entries.add({
     id: crypto.randomUUID(), date_id, meal_name, food_id: food.id, food_name: food.name, is_custom: false, is_water: false,
     qty_consumed: Number(qty_consumed), serving_unit: food.serving_unit,
-    calories: Math.round(food.calories * ratio),
+    calories: food.calories * ratio,
     macros: {
-      protein: parseFloat((food.macros.protein * ratio).toFixed(1)),
-      fat: parseFloat((food.macros.fat * ratio).toFixed(1)),
-      carbs: parseFloat((food.macros.carbs * ratio).toFixed(1))
+      protein: food.macros.protein * ratio,
+      fat: food.macros.fat * ratio,
+      carbs: food.macros.carbs * ratio
     }, created_at: Date.now()
   });
   await recalculateDailyTotal(date_id);
@@ -60,11 +60,11 @@ export async function addSavedMealToDiary(meal_name, saved_meal, dateObj) {
           id: crypto.randomUUID(), date_id, meal_name: meal_name,
           food_id: item.food.id, food_name: item.food.name, is_custom: false, is_water: false,
           qty_consumed: Number(item.qty), serving_unit: item.food.serving_unit,
-          calories: Math.round(item.food.calories * ratio),
+          calories: item.food.calories * ratio,
           macros: {
-              protein: parseFloat((item.food.macros.protein * ratio).toFixed(1)),
-              fat: parseFloat((item.food.macros.fat * ratio).toFixed(1)),
-              carbs: parseFloat((item.food.macros.carbs * ratio).toFixed(1))
+              protein: item.food.macros.protein * ratio,
+              fat: item.food.macros.fat * ratio,
+              carbs: item.food.macros.carbs * ratio
           },
           created_at: timestamp + index 
       };

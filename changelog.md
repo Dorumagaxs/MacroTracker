@@ -1,0 +1,11 @@
+# v0.1.2
+- Fixes:
+    - Excluídos os dias sem registro do cálculo da média semanal e mensal na aba Histórico
+    - Total de calorias e macros sempre arredondado para 1 casa decimal
+- Features:
+    - Substituídos os popups nativos pelos da biblioteca SweetAlert2
+    - Água sempre mostrada como primeira refeição
+    - Mostrar kcal e macros total das Refeições
+    - Autocomplete adicionado à seleção de Refeição na aba Diário
+    - Cálculo automático da meta de kcal a partir das macros definidas na aba Ajustes > Metas Nutricionais
+    - Opção de exportação unicamente do Catálogo, sem histórico do Diário

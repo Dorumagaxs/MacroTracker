@@ -1,8 +1,55 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import Swal from 'sweetalert2';
+import withReactContent from 'sweetalert2-react-content';
 import { db } from '../db';
 import { createNewFood, deleteFood, updateFood, createSavedMeal, deleteSavedMeal, updateSavedMeal, resetDiary, resetCatalog } from '../services/crud';
 import { exportData, importData } from '../services/backup';
+import { fmt, getMealMacros } from '../utils/formatUtils';
+
+const MySwal = withReactContent(Swal);
+
+// --- COMPONENTE DE ROLAGEM DE NÚMERO ---
+function SwipeNumberInput({ value, onChange, label, colorClass }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const startY = useRef(0);
+  const startVal = useRef(value);
+
+  const handleTouchStart = (e) => {
+    setIsDragging(true);
+    startY.current = e.touches[0].clientY;
+    startVal.current = value;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const deltaY = startY.current - e.touches[0].clientY;
+    const newVal = Math.max(0, startVal.current + Math.round(deltaY / 4));
+    onChange(newVal);
+  };
+
+  const handleTouchEnd = () => setIsDragging(false);
+
+  const handleWheel = (e) => {
+     e.preventDefault();
+     onChange(Math.max(0, value + (e.deltaY > 0 ? -1 : 1)));
+  };
+
+  return (
+    <div>
+      <label className="text-xs font-medium text-slate-500 ml-1">{label}</label>
+      <div 
+         className={`w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus-within:${colorClass} flex items-center justify-between px-1 py-2 outline-none rounded-t-md select-none`}
+         style={{ touchAction: 'none' }}
+         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onWheel={handleWheel}
+      >
+         <button type="button" className="w-7 h-7 text-slate-400 font-bold hover:bg-slate-200 rounded-full flex items-center justify-center" onClick={(e) => { e.preventDefault(); onChange(Math.max(0, value - 1)); }}>-</button>
+         <span className="font-semibold text-slate-800 text-lg cursor-ns-resize" title="Arraste cima/baixo">{value}</span>
+         <button type="button" className="w-7 h-7 text-slate-400 font-bold hover:bg-slate-200 rounded-full flex items-center justify-center" onClick={(e) => { e.preventDefault(); onChange(value + 1); }}>+</button>
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsTab() {
   const [view, setView] = useState('menu');
@@ -18,8 +65,11 @@ export default function SettingsTab() {
      const reader = new FileReader();
      reader.onload = async (e) => {
          const res = await importData(e.target.result, mode);
-         if(res.success) { alert("Importação concluída com sucesso!"); setView('menu'); }
-         else alert("Erro na importação: " + res.error);
+         if(res.success) { 
+             MySwal.fire('Importação concluída com sucesso!', '', 'success'); 
+             setView('menu'); 
+         }
+         else MySwal.fire('Erro na importação', res.error, 'error');
      };
      reader.readAsText(file);
   };
@@ -67,15 +117,26 @@ export default function SettingsTab() {
              <div className="space-y-6">
                 <div>
                   <p className="text-sm font-medium text-slate-700 mb-2">Exportar</p>
-                  <button onClick={exportData} className="w-full bg-md-secondary text-white py-3 rounded-xl hover:bg-opacity-90 transition font-medium">Exportar Dados (JSON)</button>
-                  <p className="text-xs text-slate-500 mt-2">Gera um ficheiro seguro com todo o seu histórico e catálogo.</p>
+                  <button onClick={() => exportData('full')} className="w-full bg-md-secondary text-white py-3 rounded-xl hover:bg-opacity-90 transition font-medium mb-2">Exportar Backup Completo</button>
+                  <button onClick={() => exportData('catalog')} className="w-full bg-slate-100 text-slate-700 border border-slate-300 py-3 rounded-xl hover:bg-slate-200 transition font-medium">Exportar Apenas Catálogo</button>
+                  <p className="text-xs text-slate-500 mt-2">Gera um ficheiro seguro. Pode escolher incluir todo o seu diário ou exportar apenas a sua base de alimentos e refeições.</p>
                 </div>
                 <div className="pt-4 border-t border-slate-100">
                   <p className="text-sm font-medium text-slate-700 mb-2">Importar</p>
                   <input type="file" accept=".json" ref={fileInputRef} className="mb-3 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-md-primary/10 file:text-md-primary hover:file:bg-md-primary/20 cursor-pointer" />
                   <div className="flex gap-2">
                     <button onClick={() => handleImport('merge')} className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-xl hover:bg-slate-200 transition text-sm font-medium">Mesclar</button>
-                    <button onClick={() => handleImport('overwrite')} className="flex-1 bg-red-100 text-red-700 py-2.5 rounded-xl hover:bg-red-200 transition text-sm font-medium">Substituir</button>
+                    <button onClick={() => {
+                        MySwal.fire({
+                          title: 'Substituir tudo?',
+                          text: "Isto irá apagar os dados atuais e carregar apenas o backup.",
+                          icon: 'warning',
+                          showCancelButton: true,
+                          confirmButtonColor: '#ba1a1a',
+                          confirmButtonText: 'Sim, substituir',
+                          cancelButtonText: 'Cancelar'
+                        }).then((res) => { if(res.isConfirmed) handleImport('overwrite'); });
+                    }} className="flex-1 bg-red-100 text-red-700 py-2.5 rounded-xl hover:bg-red-200 transition text-sm font-medium">Substituir</button>
                   </div>
                 </div>
              </div>
@@ -88,18 +149,34 @@ export default function SettingsTab() {
              <p className="text-sm text-red-600 mb-6">Atenção: Estas ações são irreversíveis e os dados não poderão ser recuperados a menos que tenha um backup exportado.</p>
              
              <div className="space-y-4">
-                <button onClick={async () => {
-                   if(window.confirm("ATENÇÃO: Deseja apagar todo o seu histórico diário? Os seus alimentos e metas não serão afetados.")){
-                       await resetDiary(); alert("Diário apagado com sucesso."); setView('menu');
-                   }
+                <button onClick={() => {
+                   MySwal.fire({
+                       title: 'Apagar Diário?',
+                       text: "Deseja apagar todo o seu histórico diário? Seus alimentos e metas não serão afetados.",
+                       icon: 'warning',
+                       showCancelButton: true,
+                       confirmButtonColor: '#ba1a1a',
+                       confirmButtonText: 'Apagar',
+                       cancelButtonText: 'Cancelar'
+                   }).then(async (result) => {
+                       if (result.isConfirmed) { await resetDiary(); MySwal.fire('Diário apagado!', '', 'success'); setView('menu'); }
+                   });
                 }} className="w-full bg-white border-2 border-red-200 text-red-700 py-3 rounded-xl hover:bg-red-100 transition font-medium">
                   Apagar Apenas Histórico/Diário
                 </button>
 
-                <button onClick={async () => {
-                   if(window.confirm("ATENÇÃO: Deseja apagar TODOS os alimentos e refeições salvas? Seu histórico diário perderá as referências de nome.")){
-                       await resetCatalog(); alert("Catálogos apagados com sucesso."); setView('menu');
-                   }
+                <button onClick={() => {
+                   MySwal.fire({
+                       title: 'Apagar Catálogo?',
+                       text: "Deseja apagar TODOS os alimentos e refeições salvas? Seu histórico perderá as referências de nome.",
+                       icon: 'warning',
+                       showCancelButton: true,
+                       confirmButtonColor: '#ba1a1a',
+                       confirmButtonText: 'Apagar Tudo',
+                       cancelButtonText: 'Cancelar'
+                   }).then(async (result) => {
+                       if (result.isConfirmed) { await resetCatalog(); MySwal.fire('Catálogos apagados!', '', 'success'); setView('menu'); }
+                   });
                 }} className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition font-medium">
                   Apagar Catálogo Completo
                 </button>
@@ -110,7 +187,6 @@ export default function SettingsTab() {
   );
 }
 
-// Goals Manager com Nomenclatura "Geral" e Botão de Exclusão Individual (X)
 function GoalsManager({ settings }) {
   if(!settings) return <p>Carregando...</p>;
   const st = { mode: settings.mode || 'global', global: settings.global || settings.goals || { calories: 2500, protein: 160, fat: 70, carbs: 300, water: 3000 }, custom: settings.custom || { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} } };
@@ -140,24 +216,50 @@ function GoalsManager({ settings }) {
     setFormData(st.custom[newDays[0]]?.calories ? st.custom[newDays[0]] : st.global);
   };
 
-  const handleResetToGlobal = async () => {
-     if(window.confirm("Deseja apagar as metas específicas e usar a meta geral para todos os dias?")) {
-         const payload = { mode: 'custom', custom: { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} } };
-         await db.settings.update(1, payload);
-         alert("Todas as metas diárias foram resetadas!");
-     }
+  const handleResetToGlobal = () => {
+      MySwal.fire({
+          title: 'Reverter Metas?',
+          text: "Deseja apagar as metas específicas e usar a meta geral para todos os dias?",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#ba1a1a',
+          confirmButtonText: 'Sim',
+          cancelButtonText: 'Não'
+      }).then(async (res) => {
+         if(res.isConfirmed) {
+             const payload = { mode: 'custom', custom: { '0':{}, '1':{}, '2':{}, '3':{}, '4':{}, '5':{}, '6':{} } };
+             await db.settings.update(1, payload);
+             MySwal.fire('Metas resetadas!', '', 'success');
+         }
+      });
   };
 
-  const handleClearSingleDay = async (e, dKey) => {
+  const handleClearSingleDay = (e, dKey) => {
      e.stopPropagation();
-     if(window.confirm(`Deseja remover a meta personalizada de ${daysMap[dKey]}? O dia voltará a usar a meta Geral.`)) {
-         const newCustom = { ...st.custom };
-         newCustom[dKey] = {};
-         await db.settings.update(1, { custom: newCustom });
-     }
+     MySwal.fire({
+          title: 'Remover Meta?',
+          text: `Deseja remover a meta de ${daysMap[dKey]}?`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#ba1a1a',
+          confirmButtonText: 'Remover',
+          cancelButtonText: 'Cancelar'
+     }).then(async (res) => {
+         if(res.isConfirmed) {
+             const newCustom = { ...st.custom };
+             newCustom[dKey] = {};
+             await db.settings.update(1, { custom: newCustom });
+         }
+     });
   };
 
-  const handleChange = (e) => setFormData({...formData, [e.target.name]: Number(e.target.value)});
+  // Atualiza campo numérico por rolagem
+  const handleMacroChange = (field, val) => {
+     const newForm = { ...formData, [field]: val };
+     newForm.calories = (newForm.protein * 4) + (newForm.fat * 9) + (newForm.carbs * 4);
+     setFormData(newForm);
+  };
+  const handleWaterChange = (e) => setFormData({...formData, water: Number(e.target.value)});
 
   const handleSave = async (e) => { 
     e.preventDefault(); 
@@ -168,7 +270,7 @@ function GoalsManager({ settings }) {
         activeDays.forEach(d => newCustom[d] = formData);
         await db.settings.update(1, { mode: 'custom', custom: newCustom });
     }
-    alert('Metas atualizadas com sucesso!'); 
+    MySwal.fire({ title: 'Metas atualizadas com sucesso!', icon: 'success', timer: 1500, showConfirmButton: false });
   };
 
   return (
@@ -193,13 +295,17 @@ function GoalsManager({ settings }) {
           )}
 
           <form onSubmit={handleSave} className="space-y-4">
-             <div><label className="text-xs font-medium text-slate-500 ml-1">Calorias (kcal)</label><input type="number" name="calories" value={formData.calories||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
-             <div className="grid grid-cols-3 gap-3">
-                <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><input type="number" name="protein" value={formData.protein||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
-                <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><input type="number" name="fat" value={formData.fat||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
-                <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><input type="number" name="carbs" value={formData.carbs||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
+             <div>
+                <label className="text-xs font-medium text-slate-500 ml-1">Calorias (Auto Calculadas)</label>
+                <input type="text" readOnly value={`${formData.calories||0} kcal`} className="w-full mt-1 bg-slate-100 text-slate-600 border-b-2 border-slate-200 px-3 py-2 outline-none rounded-t-md font-semibold" />
              </div>
-             <div><label className="text-xs font-medium text-slate-500 ml-1">Água (ml)</label><input type="number" name="water" value={formData.water||''} onChange={handleChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-3 py-2 outline-none rounded-t-md" /></div>
+             
+             <div className="grid grid-cols-3 gap-3">
+                <SwipeNumberInput label="Prot (g)" value={formData.protein||0} onChange={v => handleMacroChange('protein', v)} colorClass="border-blue-500" />
+                <SwipeNumberInput label="Gord (g)" value={formData.fat||0} onChange={v => handleMacroChange('fat', v)} colorClass="border-amber-500" />
+                <SwipeNumberInput label="Carb (g)" value={formData.carbs||0} onChange={v => handleMacroChange('carbs', v)} colorClass="border-purple-500" />
+             </div>
+             <div><label className="text-xs font-medium text-slate-500 ml-1">Água (ml)</label><input type="number" step="50" name="water" value={formData.water||''} onChange={handleWaterChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-3 py-2 outline-none rounded-t-md" /></div>
              <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-2 shadow-md hover:bg-opacity-90 transition">Gravar Meta</button>
           </form>
 
@@ -210,10 +316,8 @@ function GoalsManager({ settings }) {
           )}
        </div>
 
-       {/* --- LISTA DE METAS VIGENTES (com botão X de exclusão individual) --- */}
        <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
           <h3 className="font-semibold text-slate-800 text-base mb-3">📋 Metas Vigentes Atuais</h3>
-          
           {st.mode === 'global' ? (
              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm space-y-1">
                 <p className="font-semibold text-md-primary">Modo Geral (Aplicado a todos os dias)</p>
@@ -266,9 +370,18 @@ function CatalogManager({ foods }) {
        .sort((a,b) => a.name.localeCompare(b.name));
   }, [foods, searchTerm]);
 
-  const handleDelete = async (e, id) => { 
+  const handleDelete = (e, id) => { 
      e.stopPropagation();
-     if(window.confirm("Apagar este alimento do catálogo?")) await deleteFood(id); 
+     MySwal.fire({
+          title: 'Apagar Alimento?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#ba1a1a',
+          confirmButtonText: 'Sim, apagar',
+          cancelButtonText: 'Não'
+     }).then(async (res) => {
+         if(res.isConfirmed) await deleteFood(id);
+     });
   };
 
   const handleEditClick = (f) => {
@@ -310,14 +423,14 @@ function CatalogManager({ foods }) {
             <h4 className="font-semibold text-slate-700 mb-2">{editingId ? 'Editar Alimento' : 'Novo Alimento'}</h4>
             <div><label className="text-xs font-medium text-slate-500 ml-1">Nome</label><input type="text" value={newFood.name} onChange={e=>setNewFood({...newFood, name: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
             <div className="grid grid-cols-2 gap-3">
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><input type="number" value={newFood.base} onChange={e=>setNewFood({...newFood, base: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><input type="number" step="0.1" value={newFood.base} onChange={e=>setNewFood({...newFood, base: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
                <div><label className="text-xs font-medium text-slate-500 ml-1">Unidade</label><select value={newFood.unit} onChange={e=>setNewFood({...newFood, unit: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md text-sm text-slate-700"><option value="g">gramas (g)</option><option value="ml">mililitros (ml)</option><option value="un">unidades (un)</option></select></div>
             </div>
-            <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><input type="number" value={newFood.cal} onChange={e=>setNewFood({...newFood, cal: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
+            <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><input type="number" step="0.1" value={newFood.cal} onChange={e=>setNewFood({...newFood, cal: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
             <div className="grid grid-cols-3 gap-3">
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Prot</label><input type="number" value={newFood.prot} onChange={e=>setNewFood({...newFood, prot: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-blue-500 px-3 py-2 outline-none rounded-md" /></div>
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Gord</label><input type="number" value={newFood.fat} onChange={e=>setNewFood({...newFood, fat: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-amber-500 px-3 py-2 outline-none rounded-md" /></div>
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Carb</label><input type="number" value={newFood.carb} onChange={e=>setNewFood({...newFood, carb: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-purple-500 px-3 py-2 outline-none rounded-md" /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Prot</label><input type="number" step="0.1" value={newFood.prot} onChange={e=>setNewFood({...newFood, prot: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-blue-500 px-3 py-2 outline-none rounded-md" /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Gord</label><input type="number" step="0.1" value={newFood.fat} onChange={e=>setNewFood({...newFood, fat: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-amber-500 px-3 py-2 outline-none rounded-md" /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Carb</label><input type="number" step="0.1" value={newFood.carb} onChange={e=>setNewFood({...newFood, carb: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-purple-500 px-3 py-2 outline-none rounded-md" /></div>
             </div>
             <button type="submit" className="w-full bg-md-tertiary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition">{editingId ? 'Guardar Alterações' : 'Gravar Alimento'}</button>
          </form>
@@ -337,9 +450,9 @@ function CatalogManager({ foods }) {
                <h4 className="font-medium text-slate-800 text-sm leading-tight group-hover:text-md-primary">{f.name} <span className="text-[10px] text-slate-400 font-normal ml-1">(Editar)</span></h4>
                <button onClick={(e) => handleDelete(e, f.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
              </div>
-             <p className="text-xs text-slate-500 mb-1">{f.calories} kcal / {f.base_serving}{f.serving_unit}</p>
+             <p className="text-xs text-slate-500 mb-1">{fmt(f.calories)} kcal / {f.base_serving}{f.serving_unit}</p>
              <div className="flex gap-2 text-[10px] text-slate-400">
-               <span>P: {f.macros.protein}g</span>•<span>G: {f.macros.fat}g</span>•<span>C: {f.macros.carbs}g</span>
+               <span>P: {fmt(f.macros.protein)}g</span>•<span>G: {fmt(f.macros.fat)}g</span>•<span>C: {fmt(f.macros.carbs)}g</span>
              </div>
            </div>
          ))}
@@ -377,7 +490,10 @@ function MealsManager({ meals, foods }) {
   const handleCancel = () => { setCreating(false); setEditingId(null); setMealName(''); setItems([]); };
 
   const handleSaveMeal = async () => { 
-      if(!mealName || items.length === 0) return alert('Dê um nome e adicione itens.'); 
+      if(!mealName || items.length === 0) {
+          MySwal.fire('Atenção', 'Dê um nome e adicione alimentos à refeição.', 'warning');
+          return;
+      }
       if(editingId) {
           await updateSavedMeal(editingId, mealName, items);
       } else {
@@ -386,9 +502,18 @@ function MealsManager({ meals, foods }) {
       handleCancel();
   };
   
-  const handleDelete = async (e, id) => { 
+  const handleDelete = (e, id) => { 
       e.stopPropagation();
-      if(window.confirm("Apagar esta refeição?")) await deleteSavedMeal(id); 
+      MySwal.fire({
+          title: 'Apagar Refeição?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#ba1a1a',
+          confirmButtonText: 'Sim, apagar',
+          cancelButtonText: 'Não'
+      }).then(async (res) => {
+         if(res.isConfirmed) await deleteSavedMeal(id);
+      });
   };
 
   return (
@@ -404,8 +529,12 @@ function MealsManager({ meals, foods }) {
          <div className="space-y-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
             <h4 className="font-semibold text-slate-700 mb-2">{editingId ? 'Editar Refeição' : 'Criar Refeição'}</h4>
             <div><label className="text-xs font-medium text-slate-500 ml-1">Nome da Refeição</label><input type="text" placeholder="Ex: Pão com Ovos" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
-            <div className="border-t border-slate-200 pt-4"><p className="text-xs font-medium text-slate-500 mb-2">Adicionar Alimentos:</p>{!selectedFood ? <><input type="text" placeholder="Buscar alimento..." value={searchTermFoods} onChange={e=>setSearchTermFoods(e.target.value)} className="w-full bg-white border border-slate-200 px-3 py-2 rounded-md outline-none focus:border-md-primary text-sm" />{searchTermFoods && <div className="mt-2 space-y-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm max-h-40 overflow-y-auto">{filteredFoods.map(f => <div key={f.id} onClick={()=>setSelectedFood(f)} className="p-2 hover:bg-slate-50 cursor-pointer rounded text-sm text-slate-700">{f.name}</div>)}</div>}</> : <form onSubmit={handleAddItem} className="flex gap-2"><div className="flex-1"><span className="text-xs text-slate-500 block truncate">{selectedFood.name}</span><input type="number" placeholder={`Qtd (${selectedFood.serving_unit})`} value={qty} onChange={e=>setQty(e.target.value)} className="w-full bg-white border border-slate-200 px-2 py-1.5 rounded-md outline-none text-sm" autoFocus required /></div><button type="submit" className="self-end bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium">Add</button><button type="button" onClick={()=>setSelectedFood(null)} className="self-end bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-medium">X</button></form>}</div>
-            {items.length > 0 && <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2"><p className="text-xs font-semibold text-slate-600 border-b border-slate-100 pb-1">Itens incluídos:</p>{items.map(it => <div key={it.id} className="flex justify-between items-center text-sm"><span className="text-slate-700 truncate">{it.qty}{it.food.serving_unit} {it.food.name}</span><button onClick={()=>setItems(items.filter(x=>x.id!==it.id))} className="text-red-400 font-bold ml-2">X</button></div>)}</div>}
+            <div className="border-t border-slate-200 pt-4"><p className="text-xs font-medium text-slate-500 mb-2">Adicionar Alimentos:</p>{!selectedFood ? <><input type="text" placeholder="Buscar alimento..." value={searchTermFoods} onChange={e=>setSearchTermFoods(e.target.value)} className="w-full bg-white border border-slate-200 px-3 py-2 rounded-md outline-none focus:border-md-primary text-sm" />{searchTermFoods && <div className="mt-2 space-y-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm max-h-40 overflow-y-auto">{filteredFoods.map(f => <div key={f.id} onClick={()=>setSelectedFood(f)} className="p-2 hover:bg-slate-50 cursor-pointer rounded text-sm text-slate-700">{f.name}</div>)}</div>}</> : <form onSubmit={handleAddItem} className="flex gap-2"><div className="flex-1"><span className="text-xs text-slate-500 block truncate">{selectedFood.name}</span><input type="number" step="0.1" placeholder={`Qtd (${selectedFood.serving_unit})`} value={qty} onChange={e=>setQty(e.target.value)} className="w-full bg-white border border-slate-200 px-2 py-1.5 rounded-md outline-none text-sm" autoFocus required /></div><button type="submit" className="self-end bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium">Add</button><button type="button" onClick={()=>setSelectedFood(null)} className="self-end bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-medium">X</button></form>}</div>
+            {items.length > 0 && <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+               <p className="text-xs font-semibold text-slate-600 border-b border-slate-100 pb-1">Itens incluídos:</p>
+               {items.map(it => <div key={it.id} className="flex justify-between items-center text-sm"><span className="text-slate-700 truncate">{it.qty}{it.food.serving_unit} {it.food.name}</span><button onClick={()=>setItems(items.filter(x=>x.id!==it.id))} className="text-red-400 font-bold ml-2">X</button></div>)}
+               <div className="pt-2 border-t border-slate-100 text-right"><span className="text-xs font-semibold text-md-primary">Total: {getMealMacros(items).cal} kcal</span></div>
+            </div>}
             <button onClick={handleSaveMeal} className="w-full bg-md-primary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition mt-2">{editingId ? 'Guardar Alterações' : 'Gravar Refeição'}</button>
          </div>
        )}
@@ -417,18 +546,20 @@ function MealsManager({ meals, foods }) {
              </div>
              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
                {sortedMeals.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Nenhuma refeição encontrada.</p>}
-               {sortedMeals.map(m => (
+               {sortedMeals.map(m => {
+                 const mt = getMealMacros(m.items);
+                 return (
                  <div key={m.id} onClick={() => handleEditClick(m)} className="p-4 border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors group">
                    <div className="flex justify-between items-start mb-2">
                      <h4 className="font-medium text-slate-800 text-sm leading-tight group-hover:text-md-primary">{m.name} <span className="text-[10px] text-slate-400 font-normal ml-1">(Editar)</span></h4>
                      <button onClick={(e) => handleDelete(e, m.id)} className="text-red-400 hover:text-red-600 text-xl leading-none">&times;</button>
                    </div>
-                   <p className="text-xs text-slate-500 mb-1">{m.items.length} alimentos agrupados</p>
+                   <p className="text-xs text-slate-500 mb-1">{m.items.length} alimentos • <span className="font-semibold text-slate-700">{mt.cal} kcal</span></p>
                    <div className="flex flex-wrap gap-1 mt-2">
                       {m.items.map(i => <span key={i.id} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{i.food.name}</span>)}
                    </div>
                  </div>
-               ))}
+               )})}
              </div>
          </>
        )}

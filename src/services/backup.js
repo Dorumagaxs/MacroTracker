@@ -1,13 +1,24 @@
 import { db } from '../db';
-export async function exportData() {
-    const data = {
-        settings: await db.settings.toArray(), foods: await db.foods.toArray(), meals: await db.meals.toArray(),
-        daily_logs: await db.daily_logs.toArray(), meal_entries: await db.meal_entries.toArray()
-    };
+export async function exportData(type = 'full') {
+    let data = {};
+    if (type === 'catalog') {
+        data = {
+            settings: await db.settings.toArray(), 
+            foods: await db.foods.toArray(), 
+            meals: await db.meals.toArray()
+        };
+    } else {
+        data = {
+            settings: await db.settings.toArray(), foods: await db.foods.toArray(), meals: await db.meals.toArray(),
+            daily_logs: await db.daily_logs.toArray(), meal_entries: await db.meal_entries.toArray()
+        };
+    }
+    
     const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `macro-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.href = url; 
+    a.download = `macro-tracker-${type === 'catalog' ? 'catalog' : 'backup'}-${new Date().toISOString().split('T')[0]}.json`;
     a.click(); URL.revokeObjectURL(url);
 }
 export async function importData(jsonString, mode) {
@@ -15,7 +26,8 @@ export async function importData(jsonString, mode) {
         const data = JSON.parse(jsonString);
         if (mode === 'overwrite') {
             await db.settings.clear(); await db.foods.clear(); await db.meals.clear();
-            await db.daily_logs.clear(); await db.meal_entries.clear();
+            if(data.daily_logs) await db.daily_logs.clear(); 
+            if(data.meal_entries) await db.meal_entries.clear();
         }
         if (data.settings && data.settings.length > 0) await db.settings.bulkPut(data.settings);
         if (data.foods && data.foods.length > 0) await db.foods.bulkPut(data.foods);
