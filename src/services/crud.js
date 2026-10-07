@@ -53,7 +53,6 @@ export async function addFoodEntry(meal_name, food, qty_consumed, dateObj) {
 export async function addSavedMealToDiary(meal_name, saved_meal, dateObj) {
   const date_id = formatDateId(dateObj);
   const timestamp = Date.now();
-  
   const entriesToAdd = saved_meal.items.map((item, index) => {
       const ratio = Number(item.qty) / item.food.base_serving;
       return {
@@ -61,15 +60,10 @@ export async function addSavedMealToDiary(meal_name, saved_meal, dateObj) {
           food_id: item.food.id, food_name: item.food.name, is_custom: false, is_water: false,
           qty_consumed: Number(item.qty), serving_unit: item.food.serving_unit,
           calories: item.food.calories * ratio,
-          macros: {
-              protein: item.food.macros.protein * ratio,
-              fat: item.food.macros.fat * ratio,
-              carbs: item.food.macros.carbs * ratio
-          },
+          macros: { protein: item.food.macros.protein * ratio, fat: item.food.macros.fat * ratio, carbs: item.food.macros.carbs * ratio },
           created_at: timestamp + index 
       };
   });
-  
   await db.meal_entries.bulkAdd(entriesToAdd);
   await recalculateDailyTotal(date_id);
 }
@@ -85,18 +79,9 @@ export async function createNewFood(name, base_serving, unit, calories, protein,
 
 export async function updateFood(id, updatedData) { await db.foods.update(id, updatedData); }
 export async function deleteFood(id) { await db.foods.delete(id); }
-
 export async function createSavedMeal(name, items) { const newMeal = { id: crypto.randomUUID(), name, items }; await db.meals.add(newMeal); return newMeal; }
 export async function updateSavedMeal(id, name, items) { await db.meals.update(id, { name, items }); }
 export async function deleteSavedMeal(id) { await db.meals.delete(id); }
-
 export async function deleteEntry(id, date_id) { await db.meal_entries.delete(id); await recalculateDailyTotal(date_id); }
-
-export async function resetDiary() {
-    await db.daily_logs.clear();
-    await db.meal_entries.clear();
-}
-export async function resetCatalog() {
-    await db.foods.clear();
-    await db.meals.clear();
-}
+export async function resetDiary() { await db.daily_logs.clear(); await db.meal_entries.clear(); }
+export async function resetCatalog() { await db.foods.clear(); await db.meals.clear(); }

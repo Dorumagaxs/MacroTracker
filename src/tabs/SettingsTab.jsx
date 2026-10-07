@@ -6,49 +6,10 @@ import { db } from '../db';
 import { createNewFood, deleteFood, updateFood, createSavedMeal, deleteSavedMeal, updateSavedMeal, resetDiary, resetCatalog } from '../services/crud';
 import { exportData, importData } from '../services/backup';
 import { fmt, getMealMacros } from '../utils/formatUtils';
+import ClearableInput from '../components/ClearableInput';
+import SwipeNumberInput from '../components/SwipeNumberInput';
 
 const MySwal = withReactContent(Swal);
-
-function SwipeNumberInput({ value, onChange, label, colorClass }) {
-  const [isDragging, setIsDragging] = useState(false);
-  const startY = useRef(0);
-  const startVal = useRef(value);
-
-  const handleTouchStart = (e) => {
-    setIsDragging(true);
-    startY.current = e.touches[0].clientY;
-    startVal.current = value;
-  };
-
-  const handleTouchMove = (e) => {
-    if (!isDragging) return;
-    const deltaY = startY.current - e.touches[0].clientY;
-    const newVal = Math.max(0, startVal.current + Math.round(deltaY / 4));
-    onChange(newVal);
-  };
-
-  const handleTouchEnd = () => setIsDragging(false);
-
-  const handleWheel = (e) => {
-     e.preventDefault();
-     onChange(Math.max(0, value + (e.deltaY > 0 ? -1 : 1)));
-  };
-
-  return (
-    <div>
-      <label className="text-xs font-medium text-slate-500 ml-1">{label}</label>
-      <div 
-         className={`w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus-within:${colorClass} flex items-center justify-between px-1 py-2 outline-none rounded-t-md select-none`}
-         style={{ touchAction: 'none' }}
-         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onWheel={handleWheel}
-      >
-         <button type="button" className="w-7 h-7 text-slate-400 font-bold hover:bg-slate-200 rounded-full flex items-center justify-center" onClick={(e) => { e.preventDefault(); onChange(Math.max(0, value - 1)); }}>-</button>
-         <span className="font-semibold text-slate-800 text-lg cursor-ns-resize" title="Arraste cima/baixo">{value}</span>
-         <button type="button" className="w-7 h-7 text-slate-400 font-bold hover:bg-slate-200 rounded-full flex items-center justify-center" onClick={(e) => { e.preventDefault(); onChange(value + 1); }}>+</button>
-      </div>
-    </div>
-  );
-}
 
 export default function SettingsTab() {
   const [view, setView] = useState('menu');
@@ -257,7 +218,6 @@ function GoalsManager({ settings }) {
      newForm.calories = (newForm.protein * 4) + (newForm.fat * 9) + (newForm.carbs * 4);
      setFormData(newForm);
   };
-  const handleWaterChange = (e) => setFormData({...formData, water: Number(e.target.value)});
 
   const handleSave = async (e) => { 
     e.preventDefault(); 
@@ -295,7 +255,7 @@ function GoalsManager({ settings }) {
           <form onSubmit={handleSave} className="space-y-4">
              <div>
                 <label className="text-xs font-medium text-slate-500 ml-1">Calorias (Auto Calculadas)</label>
-                <input type="text" readOnly value={`${formData.calories||0} kcal`} className="w-full mt-1 bg-slate-100 text-slate-600 border-b-2 border-slate-200 px-3 py-2 outline-none rounded-t-md font-semibold" />
+                <input type="text" readOnly value={`${fmt(formData.calories||0)} kcal`} className="w-full mt-1 bg-slate-100 text-slate-600 border-b-2 border-slate-200 px-3 py-2 outline-none rounded-t-md font-semibold" />
              </div>
              
              <div className="grid grid-cols-3 gap-3">
@@ -303,7 +263,10 @@ function GoalsManager({ settings }) {
                 <SwipeNumberInput label="Gord (g)" value={formData.fat||0} onChange={v => handleMacroChange('fat', v)} colorClass="border-amber-500" />
                 <SwipeNumberInput label="Carb (g)" value={formData.carbs||0} onChange={v => handleMacroChange('carbs', v)} colorClass="border-purple-500" />
              </div>
-             <div><label className="text-xs font-medium text-slate-500 ml-1">Água (ml)</label><input type="number" step="50" name="water" value={formData.water||''} onChange={handleWaterChange} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-3 py-2 outline-none rounded-t-md" /></div>
+             <div>
+                <label className="text-xs font-medium text-slate-500 ml-1">Água (ml)</label>
+                <ClearableInput type="number" step="50" name="water" value={formData.water||''} onChange={e => setFormData({...formData, water: Number(e.target.value)})} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-3 py-2 outline-none rounded-t-md" />
+             </div>
              <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-2 shadow-md hover:bg-opacity-90 transition">Gravar Meta</button>
           </form>
 
@@ -319,8 +282,8 @@ function GoalsManager({ settings }) {
           {st.mode === 'global' ? (
              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm space-y-1">
                 <p className="font-semibold text-md-primary">Modo Geral (Aplicado a todos os dias)</p>
-                <p className="text-slate-600">🔥 <b>{st.global.calories} kcal</b> | 💧 <b>{st.global.water || 3000} ml</b></p>
-                <p className="text-xs text-slate-500">P: {st.global.protein || 0}g • G: {st.global.fat || 0}g • C: {st.global.carbs || 0}g</p>
+                <p className="text-slate-600">🔥 <b>{fmt(st.global.calories)} kcal</b> | 💧 <b>{fmt(st.global.water || 3000)} ml</b></p>
+                <p className="text-xs text-slate-500">P: {fmt(st.global.protein || 0)}g • G: {fmt(st.global.fat || 0)}g • C: {fmt(st.global.carbs || 0)}g</p>
              </div>
           ) : (
              <div className="space-y-2">
@@ -337,7 +300,7 @@ function GoalsManager({ settings }) {
                          </div>
                          <div className="flex items-center gap-3">
                             <div className="text-right text-slate-600">
-                               <span className="font-bold text-slate-800">{dayGoal.calories} kcal</span> • 💧 {dayGoal.water || 3000}ml
+                               <span className="font-bold text-slate-800">{fmt(dayGoal.calories)} kcal</span> • 💧 {fmt(dayGoal.water || 3000)}ml
                             </div>
                             {hasCustom && (
                                <button onClick={(e) => handleClearSingleDay(e, dKey)} title="Remover meta personalizada deste dia" className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 rounded-full font-bold transition-colors">
@@ -393,6 +356,11 @@ function CatalogManager({ foods }) {
      setNewFood({ name: '', base: '100', unit: 'g', cal: '', prot: '', fat: '', carb: '' });
      setShowForm(false);
   }
+  
+  const handleUnitChange = (e) => {
+     const u = e.target.value;
+     setNewFood({...newFood, unit: u, base: u === 'un' ? '1' : '100'});
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -419,16 +387,24 @@ function CatalogManager({ foods }) {
        {showForm && (
          <form onSubmit={handleSave} className="space-y-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
             <h4 className="font-semibold text-slate-700 mb-2">{editingId ? 'Editar Alimento' : 'Novo Alimento'}</h4>
-            <div><label className="text-xs font-medium text-slate-500 ml-1">Nome</label><input type="text" value={newFood.name} onChange={e=>setNewFood({...newFood, name: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
-            <div className="grid grid-cols-2 gap-3">
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><input type="number" step="0.1" value={newFood.base} onChange={e=>setNewFood({...newFood, base: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Unidade</label><select value={newFood.unit} onChange={e=>setNewFood({...newFood, unit: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md text-sm text-slate-700"><option value="g">gramas (g)</option><option value="ml">mililitros (ml)</option><option value="un">unidades (un)</option></select></div>
+            <div><label className="text-xs font-medium text-slate-500 ml-1">Nome</label>
+                <ClearableInput type="text" value={newFood.name} onChange={e=>setNewFood({...newFood, name: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required />
             </div>
-            <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><input type="number" step="0.1" value={newFood.cal} onChange={e=>setNewFood({...newFood, cal: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
+            <div className="grid grid-cols-2 gap-3">
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label>
+                    <ClearableInput type="number" step="0.1" value={newFood.base} onChange={e=>setNewFood({...newFood, base: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required />
+               </div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Unidade</label>
+                    <select value={newFood.unit} onChange={handleUnitChange} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md text-sm text-slate-700"><option value="g">gramas (g)</option><option value="ml">mililitros (ml)</option><option value="un">unidades (un)</option></select>
+               </div>
+            </div>
+            <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label>
+                <ClearableInput type="number" step="0.1" value={newFood.cal} onChange={e=>setNewFood({...newFood, cal: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required />
+            </div>
             <div className="grid grid-cols-3 gap-3">
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Prot</label><input type="number" step="0.1" value={newFood.prot} onChange={e=>setNewFood({...newFood, prot: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-blue-500 px-3 py-2 outline-none rounded-md" /></div>
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Gord</label><input type="number" step="0.1" value={newFood.fat} onChange={e=>setNewFood({...newFood, fat: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-amber-500 px-3 py-2 outline-none rounded-md" /></div>
-               <div><label className="text-xs font-medium text-slate-500 ml-1">Carb</label><input type="number" step="0.1" value={newFood.carb} onChange={e=>setNewFood({...newFood, carb: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-purple-500 px-3 py-2 outline-none rounded-md" /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Prot</label><ClearableInput type="number" step="0.1" value={newFood.prot} onChange={e=>setNewFood({...newFood, prot: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-blue-500 px-3 py-2 outline-none rounded-md" /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Gord</label><ClearableInput type="number" step="0.1" value={newFood.fat} onChange={e=>setNewFood({...newFood, fat: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-amber-500 px-3 py-2 outline-none rounded-md" /></div>
+               <div><label className="text-xs font-medium text-slate-500 ml-1">Carb</label><ClearableInput type="number" step="0.1" value={newFood.carb} onChange={e=>setNewFood({...newFood, carb: e.target.value})} className="w-full mt-1 bg-white border border-slate-200 focus:border-purple-500 px-3 py-2 outline-none rounded-md" /></div>
             </div>
             <button type="submit" className="w-full bg-md-tertiary text-white py-2 rounded-lg font-medium shadow-sm hover:bg-opacity-90 transition">{editingId ? 'Guardar Alterações' : 'Gravar Alimento'}</button>
          </form>
@@ -436,7 +412,7 @@ function CatalogManager({ foods }) {
 
        {!showForm && (
          <div className="mb-4">
-             <input type="text" placeholder="Procurar alimentos..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
+             <ClearableInput type="text" placeholder="Procurar alimentos..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
          </div>
        )}
 
@@ -526,8 +502,10 @@ function MealsManager({ meals, foods }) {
        {creating && (
          <div className="space-y-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
             <h4 className="font-semibold text-slate-700 mb-2">{editingId ? 'Editar Refeição' : 'Criar Refeição'}</h4>
-            <div><label className="text-xs font-medium text-slate-500 ml-1">Nome da Refeição</label><input type="text" placeholder="Ex: Pão com Ovos" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required /></div>
-            <div className="border-t border-slate-200 pt-4"><p className="text-xs font-medium text-slate-500 mb-2">Adicionar Alimentos:</p>{!selectedFood ? <><input type="text" placeholder="Buscar alimento..." value={searchTermFoods} onChange={e=>setSearchTermFoods(e.target.value)} className="w-full bg-white border border-slate-200 px-3 py-2 rounded-md outline-none focus:border-md-primary text-sm" />{searchTermFoods && <div className="mt-2 space-y-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm max-h-40 overflow-y-auto">{filteredFoods.map(f => <div key={f.id} onClick={()=>setSelectedFood(f)} className="p-2 hover:bg-slate-50 cursor-pointer rounded text-sm text-slate-700">{f.name}</div>)}</div>}</> : <form onSubmit={handleAddItem} className="flex gap-2"><div className="flex-1"><span className="text-xs text-slate-500 block truncate">{selectedFood.name}</span><input type="number" step="0.1" placeholder={`Qtd (${selectedFood.serving_unit})`} value={qty} onChange={e=>setQty(e.target.value)} className="w-full bg-white border border-slate-200 px-2 py-1.5 rounded-md outline-none text-sm" autoFocus required /></div><button type="submit" className="self-end bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium">Add</button><button type="button" onClick={()=>setSelectedFood(null)} className="self-end bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-medium">X</button></form>}</div>
+            <div><label className="text-xs font-medium text-slate-500 ml-1">Nome da Refeição</label>
+               <ClearableInput type="text" placeholder="Ex: Pão com Ovos" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-md" required />
+            </div>
+            <div className="border-t border-slate-200 pt-4"><p className="text-xs font-medium text-slate-500 mb-2">Adicionar Alimentos:</p>{!selectedFood ? <><ClearableInput type="text" placeholder="Buscar alimento..." value={searchTermFoods} onChange={e=>setSearchTermFoods(e.target.value)} className="w-full bg-white border border-slate-200 px-3 py-2 rounded-md outline-none focus:border-md-primary text-sm" />{searchTermFoods && <div className="mt-2 space-y-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm max-h-40 overflow-y-auto">{filteredFoods.map(f => <div key={f.id} onClick={()=>setSelectedFood(f)} className="p-2 hover:bg-slate-50 cursor-pointer rounded text-sm text-slate-700">{f.name}</div>)}</div>}</> : <form onSubmit={handleAddItem} className="flex gap-2"><div className="flex-1"><span className="text-xs text-slate-500 block truncate">{selectedFood.name}</span><input type="number" step="0.1" placeholder={`Qtd (${selectedFood.serving_unit})`} value={qty} onChange={e=>setQty(e.target.value)} className="w-full bg-white border border-slate-200 px-2 py-1.5 rounded-md outline-none text-sm" autoFocus required /></div><button type="submit" className="self-end bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium">Add</button><button type="button" onClick={()=>setSelectedFood(null)} className="self-end bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-medium">X</button></form>}</div>
             {items.length > 0 && <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
                <p className="text-xs font-semibold text-slate-600 border-b border-slate-100 pb-1">Itens incluídos:</p>
                {items.map(it => <div key={it.id} className="flex justify-between items-center text-sm"><span className="text-slate-700 truncate">{it.qty}{it.food.serving_unit} {it.food.name}</span><button onClick={()=>setItems(items.filter(x=>x.id!==it.id))} className="text-red-400 font-bold ml-2">X</button></div>)}
@@ -543,7 +521,7 @@ function MealsManager({ meals, foods }) {
        {!creating && (
          <>
              <div className="mb-4">
-                 <input type="text" placeholder="Procurar refeição..." value={searchTermMeals} onChange={e=>setSearchTermMeals(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
+                 <ClearableInput type="text" placeholder="Procurar refeição..." value={searchTermMeals} onChange={e=>setSearchTermMeals(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
              </div>
              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
                {sortedMeals.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Nenhuma refeição encontrada.</p>}

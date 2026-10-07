@@ -8,6 +8,7 @@ import { formatDateId, isToday, isYesterday, isTomorrow, getDailyGoal } from '..
 import { fmt, getMealMacros } from '../utils/formatUtils';
 import { addCustomEntry, deleteEntry, addFoodEntry, createNewFood, addWaterEntry, addSavedMealToDiary } from '../services/crud';
 import DateSelector from '../components/DateSelector';
+import ClearableInput from '../components/ClearableInput';
 
 const MySwal = withReactContent(Swal);
 
@@ -79,11 +80,20 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
 
   const handleAddCustom = async (e) => { e.preventDefault(); await addCustomEntry(mealName, cal, prot || 0, fat || 0, carb || 0, selectedDate); closeModal(); };
   const handleAddFromCatalog = async (e) => { e.preventDefault(); if(!selectedFood || !consumeQty) return; await addFoodEntry(mealName, selectedFood, consumeQty, selectedDate); closeModal(); };
+  
+  const handleUnitChange = (e) => {
+     const u = e.target.value;
+     setUnit(u);
+     if(u === 'un') setBaseServing('1');
+     else setBaseServing('100');
+  };
+
   const handleCreateFood = async (e) => { 
       e.preventDefault(); 
       const food = await createNewFood(newFoodName, baseServing, unit, cal, prot||0, fat||0, carb||0); 
-      setSelectedFood(food); setAddMode('catalog'); setNewFoodName(''); setUnit('g');
+      setSelectedFood(food); setAddMode('catalog'); setNewFoodName(''); setUnit('g'); setBaseServing('100'); setCal(''); setProt(''); setFat(''); setCarb('');
   };
+
   const handleAddWater = async (e) => { e.preventDefault(); if(!waterAmount) return; await addWaterEntry(waterAmount, selectedDate); setShowWaterModal(false); setWaterAmount(''); };
   
   const handleAddSavedMeal = async () => {
@@ -93,10 +103,33 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
   };
 
   const closeModal = () => { setShowAddModal(false); setSelectedFood(null); setSelectedMealObj(null); setConsumeQty(''); setCal(''); setProt(''); setFat(''); setCarb(''); };
-  const calcPercent = (current, goal) => Math.min((current / goal) * 100, 100) || 0;
+  
+  const calcPercent = (current, goal) => {
+      const p = (current / goal) * 100;
+      return isNaN(p) ? 0 : Math.min(p, 100);
+  };
+  const calcExcess = (current, goal) => {
+      if (current <= goal || goal === 0) return 0;
+      const excess = ((current - goal) / goal) * 100;
+      return Math.min(excess, 100);
+  };
+
   const handlePrev = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
   const handleNext = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
   const getLabel = () => { if(isToday(selectedDate)) return 'Hoje'; if(isYesterday(selectedDate)) return 'Ontem'; if(isTomorrow(selectedDate)) return 'Amanhã'; return selectedDate.toLocaleDateString('pt-BR'); };
+
+  const renderProgressBar = (val, goal, baseColorClass) => {
+     const pNormal = calcPercent(val, goal);
+     const pExcess = calcExcess(val, goal);
+     return (
+        <div className="relative w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+           <div className={`${baseColorClass} absolute left-0 top-0 h-full rounded-full transition-all duration-500`} style={{ width: `${pNormal}%` }}></div>
+           {pExcess > 0 && (
+              <div className="bg-red-500 absolute left-0 top-0 h-full rounded-full transition-all duration-500 z-10 opacity-90" style={{ width: `${pExcess}%` }}></div>
+           )}
+        </div>
+     );
+  };
 
   const renderMealGroup = (mName, entries, dragProps = null) => {
      const tCal = entries.reduce((s, e) => s + e.calories, 0);
@@ -142,10 +175,20 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
     <div className="space-y-6">
       <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
         <DateSelector date={selectedDate} onDateChange={setSelectedDate} label={getLabel()} onPrev={handlePrev} onNext={handleNext} />
+        
         <div className="space-y-1 mb-5 border-t border-slate-100 pt-5">
-          <div className="flex justify-between text-sm"><span className="font-medium text-slate-700">Calorias</span><span className="text-slate-500">{fmt(dailyLog.total_calories)} / {fmt(activeGoals.calories)} kcal</span></div>
-          <div className="w-full bg-slate-100 rounded-full h-3"><div className="bg-md-primary h-3 rounded-full transition-all duration-500" style={{ width: `${calcPercent(dailyLog.total_calories, activeGoals.calories)}%` }}></div></div>
+          <div className="flex justify-between text-sm">
+             <span className="font-medium text-slate-700">Calorias</span>
+             <span className="text-slate-500">{fmt(dailyLog.total_calories)} / {fmt(activeGoals.calories)} kcal</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-3 relative overflow-hidden">
+             <div className="bg-md-primary h-3 absolute left-0 top-0 rounded-full transition-all duration-500" style={{ width: `${calcPercent(dailyLog.total_calories, activeGoals.calories)}%` }}></div>
+             {dailyLog.total_calories > activeGoals.calories && (
+                 <div className="bg-red-500 h-3 absolute left-0 top-0 rounded-full transition-all duration-500 opacity-90 z-10" style={{ width: `${calcExcess(dailyLog.total_calories, activeGoals.calories)}%` }}></div>
+             )}
+          </div>
         </div>
+        
         <div className="space-y-3">
           {[
             { label: 'Proteínas', val: dailyLog.total_protein, goal: activeGoals.protein, color: 'bg-blue-500', unit: 'g' },
@@ -155,7 +198,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
           ].map(m => (
             <div key={m.label} className="space-y-1">
               <div className="flex justify-between text-xs"><span className="font-medium text-slate-600">{m.label}</span><span className="text-slate-400">{fmt(m.val)} / {fmt(m.goal)}{m.unit}</span></div>
-              <div className="w-full bg-slate-100 rounded-full h-1.5"><div className={`${m.color} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${calcPercent(m.val, m.goal)}%` }}></div></div>
+              {renderProgressBar(m.val, m.goal, m.color)}
             </div>
           ))}
         </div>
@@ -199,7 +242,9 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 pb-safe animate-slide-up">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">Registrar Água</h3>
-            <div className="mb-6"><label className="text-xs font-medium text-slate-500 ml-1">Quantidade (ml)</label><input type="number" placeholder="Ex: 250" value={waterAmount} onChange={e=>setWaterAmount(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-4 py-3 outline-none rounded-t-md text-lg" autoFocus /></div>
+            <div className="mb-6"><label className="text-xs font-medium text-slate-500 ml-1">Quantidade (ml)</label>
+                <ClearableInput type="number" placeholder="Ex: 250" value={waterAmount} onChange={e=>setWaterAmount(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-cyan-500 px-4 py-3 outline-none rounded-t-md text-lg" autoFocus />
+            </div>
             <div className="flex gap-3 mt-2">
                <button onClick={()=>setShowWaterModal(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-700 font-medium rounded-full hover:bg-slate-200 transition">Cancelar</button>
                <button onClick={handleAddWater} className="flex-1 py-3.5 bg-cyan-500 text-white font-medium rounded-full shadow-md hover:bg-cyan-600 transition">Salvar</button>
@@ -217,7 +262,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
             </div>
             <div className="p-4 bg-slate-50 shrink-0">
                <label className="text-xs font-medium text-slate-500 ml-1">Refeição Destino</label>
-               <input list="meal-names-list" type="text" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-lg transition-colors shadow-sm" placeholder="Ex: Café da Manhã" required />
+               <ClearableInput list="meal-names-list" type="text" value={mealName} onChange={e=>setMealName(e.target.value)} className="w-full mt-1 bg-white border border-slate-200 focus:border-md-primary px-3 py-2 outline-none rounded-lg transition-colors shadow-sm" placeholder="Ex: Café da Manhã" required />
                <datalist id="meal-names-list">
                   {orderedMealNames.filter(m => m !== 'Água').map(m => <option key={m} value={m} />)}
                   <option value="Café da Manhã" />
@@ -239,13 +284,15 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
               {addMode === 'catalog' && (
                 <div className="space-y-4">
                   {!selectedFood ? (
-                    <><input type="text" placeholder="Buscar alimento salvo..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
+                    <><ClearableInput type="text" placeholder="Buscar alimento salvo..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full bg-slate-100 px-4 py-2.5 rounded-full outline-none focus:ring-2 ring-md-primary/20 text-sm" />
                       <div className="space-y-2 mt-4">{foods.length === 0 ? <p className="text-center text-sm text-slate-400 py-4">Nenhum alimento encontrado.</p> : foods.map(f => ( <div key={f.id} onClick={() => setSelectedFood(f)} className="p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition"><p className="font-medium text-slate-800 text-sm">{f.name}</p><p className="text-xs text-slate-500">{fmt(f.calories)} kcal por {f.base_serving}{f.serving_unit}</p></div> ))}</div>
                     </>
                   ) : (
                     <form onSubmit={handleAddFromCatalog} className="space-y-4 animate-fade-in">
                       <div className="p-4 bg-md-primary/10 rounded-xl border border-md-primary/20"><div className="flex justify-between items-center mb-2"><h4 className="font-semibold text-md-primary">{selectedFood.name}</h4><button type="button" onClick={() => setSelectedFood(null)} className="text-xs text-md-primary underline">Voltar</button></div><p className="text-xs text-md-secondary">Base: {fmt(selectedFood.calories)} kcal / {selectedFood.base_serving}{selectedFood.serving_unit}</p></div>
-                      <div><label className="text-xs font-medium text-slate-500 ml-1">Quantidade Consumida ({selectedFood.serving_unit})</label><input type="number" value={consumeQty} onChange={e=>setConsumeQty(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2.5 outline-none rounded-t-md text-lg" autoFocus required /></div>
+                      <div><label className="text-xs font-medium text-slate-500 ml-1">Quantidade Consumida ({selectedFood.serving_unit})</label>
+                          <ClearableInput type="number" step="0.1" value={consumeQty} onChange={e=>setConsumeQty(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2.5 outline-none rounded-t-md text-lg" autoFocus required />
+                      </div>
                       <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-6 shadow-md hover:bg-opacity-90 transition">Adicionar ao Diário</button>
                     </form>
                   )}
@@ -286,11 +333,11 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
 
               {addMode === 'custom' && (
                 <form onSubmit={handleAddCustom} className="space-y-4">
-                  <div><label className="text-xs font-medium text-slate-500 ml-1">Calorias (kcal)</label><input type="number" step="0.1" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+                  <div><label className="text-xs font-medium text-slate-500 ml-1">Calorias (kcal)</label><ClearableInput type="number" step="0.1" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
                   <div className="grid grid-cols-3 gap-3">
-                    <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><input type="number" step="0.1" value={prot} onChange={e=>setProt(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
-                    <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><input type="number" step="0.1" value={fat} onChange={e=>setFat(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
-                    <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><input type="number" step="0.1" value={carb} onChange={e=>setCarb(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                    <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><ClearableInput type="number" step="0.1" value={prot} onChange={e=>setProt(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                    <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><ClearableInput type="number" step="0.1" value={fat} onChange={e=>setFat(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                    <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><ClearableInput type="number" step="0.1" value={carb} onChange={e=>setCarb(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
                   </div>
                   <button type="submit" className="w-full bg-md-primary text-white py-3.5 rounded-full font-medium mt-6 shadow-md hover:bg-opacity-90 transition">Salvar Entrada</button>
                 </form>
@@ -298,22 +345,22 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
 
               {addMode === 'create' && (
                 <form onSubmit={handleCreateFood} className="space-y-4">
-                  <div><label className="text-xs font-medium text-slate-500 ml-1">Nome do Alimento</label><input type="text" value={newFoodName} onChange={e=>setNewFoodName(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+                  <div><label className="text-xs font-medium text-slate-500 ml-1">Nome do Alimento</label><ClearableInput type="text" value={newFoodName} onChange={e=>setNewFoodName(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
                   <div className="grid grid-cols-2 gap-3">
-                     <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><input type="number" value={baseServing} onChange={e=>setBaseServing(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+                     <div><label className="text-xs font-medium text-slate-500 ml-1">Porção</label><ClearableInput type="number" step="0.1" value={baseServing} onChange={e=>setBaseServing(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
                      <div><label className="text-xs font-medium text-slate-500 ml-1">Unidade</label>
-                        <select value={unit} onChange={e=>setUnit(e.target.value)} className="w-full mt-1 bg-white border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md text-sm text-slate-700">
+                        <select value={unit} onChange={handleUnitChange} className="w-full mt-1 bg-white border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md text-sm text-slate-700">
                            <option value="g">gramas (g)</option>
                            <option value="ml">mililitros (ml)</option>
                            <option value="un">unidades (un)</option>
                         </select>
                      </div>
                   </div>
-                  <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><input type="number" step="0.1" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
+                  <div><label className="text-xs font-medium text-slate-500 ml-1">Kcal na Porção</label><ClearableInput type="number" step="0.1" value={cal} onChange={e=>setCal(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-md-primary px-3 py-2 outline-none rounded-t-md" required /></div>
                   <div className="grid grid-cols-3 gap-3">
-                    <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><input type="number" step="0.1" value={prot} onChange={e=>setProt(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
-                    <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><input type="number" step="0.1" value={fat} onChange={e=>setFat(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
-                    <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><input type="number" step="0.1" value={carb} onChange={e=>setCarb(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                    <div><label className="text-xs font-medium text-slate-500 ml-1">Prot (g)</label><ClearableInput type="number" step="0.1" value={prot} onChange={e=>setProt(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-blue-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                    <div><label className="text-xs font-medium text-slate-500 ml-1">Gord (g)</label><ClearableInput type="number" step="0.1" value={fat} onChange={e=>setFat(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-amber-500 px-3 py-2 outline-none rounded-t-md" /></div>
+                    <div><label className="text-xs font-medium text-slate-500 ml-1">Carb (g)</label><ClearableInput type="number" step="0.1" value={carb} onChange={e=>setCarb(e.target.value)} className="w-full mt-1 bg-slate-50 border-b-2 border-slate-300 focus:border-purple-500 px-3 py-2 outline-none rounded-t-md" /></div>
                   </div>
                   <button type="submit" className="w-full bg-md-tertiary text-white py-3.5 rounded-full font-medium mt-6 shadow-md hover:bg-opacity-90 transition">Salvar no Catálogo</button>
                 </form>

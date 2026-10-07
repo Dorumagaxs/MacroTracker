@@ -1,3 +1,11 @@
+# v0.1.4
+- Features:
+    - Barra vermelha de sobreposição quando a meta diária for ultrapassada
+    - Botão x em todos os inputs para limpar o campo
+    - Na criação de alimento, mudança da porção para 1 quando selecionada a unidade de medida "unidade"
+    - Na criação de alimento, mudança da porção para 100 quando selecionada a unidade de medida "gramas" ou "mililitros"
+    - Populado a Base de Dados com os 200 alimentos mais consumidos no Brasil, utilizando sempre que possível os valores da TACO
+
 # v0.1.2
 - Fixes:
     - Excluídos os dias sem registro do cálculo da média semanal e mensal na aba Histórico
