@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 import { db } from '../db';
-import { createNewFood, deleteFood, updateFood, createSavedMeal, deleteSavedMeal, updateSavedMeal, resetDiary, resetCatalog } from '../services/crud';
+import { createNewFood, deleteFood, updateFood, createSavedMeal, deleteSavedMeal, updateSavedMeal, resetDiary, resetCatalog, restoreDefaultFoods } from '../services/crud';
 import { exportData, importData } from '../services/backup';
 import { fmt, getMealMacros } from '../utils/formatUtils';
 import ClearableInput from '../components/ClearableInput';
@@ -54,7 +54,7 @@ export default function SettingsTab() {
       </button>
       <button onClick={() => setView('reset')} className="w-full bg-white p-5 rounded-[24px] shadow-sm border border-red-100 text-left hover:bg-red-50 transition">
         <h3 className="font-semibold text-red-600 text-lg">⚠️ Limpeza de Dados</h3>
-        <p className="text-sm text-red-400 mt-1">Apagar Diário ou resetar o Catálogo completo.</p>
+        <p className="text-sm text-red-400 mt-1">Apagar Diário, apagar Catálogo, ou restaurar Padrões.</p>
       </button>
     </div>
   );
@@ -106,7 +106,7 @@ export default function SettingsTab() {
        {view === 'reset' && (
           <div className="bg-red-50 p-5 rounded-[24px] shadow-sm border border-red-100">
              <h3 className="font-semibold text-red-800 text-lg mb-4">Zona de Perigo</h3>
-             <p className="text-sm text-red-600 mb-6">Atenção: Estas ações são irreversíveis e os dados não poderão ser recuperados a menos que tenha um backup exportado.</p>
+             <p className="text-sm text-red-600 mb-6">Atenção: A deleção é irreversível e os dados não poderão ser recuperados a menos que tenha um backup.</p>
              
              <div className="space-y-4">
                 <button onClick={() => {
@@ -140,6 +140,28 @@ export default function SettingsTab() {
                 }} className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition font-medium">
                   Apagar Catálogo Completo
                 </button>
+                
+                <div className="pt-4 mt-4 border-t border-red-200">
+                    <button onClick={() => {
+                       MySwal.fire({
+                           title: 'Restaurar Padrões?',
+                           text: "Deseja carregar os alimentos da tabela TACO no seu catálogo? Itens que já existam com o mesmo nome exato não serão duplicados.",
+                           icon: 'question',
+                           showCancelButton: true,
+                           confirmButtonColor: '#386a20',
+                           confirmButtonText: 'Carregar TACO',
+                           cancelButtonText: 'Cancelar'
+                       }).then(async (result) => {
+                           if (result.isConfirmed) { 
+                               const added = await restoreDefaultFoods(); 
+                               MySwal.fire('Catálogo Atualizado!', `${added} novos alimentos foram adicionados.`, 'success'); 
+                               setView('menu'); 
+                           }
+                       });
+                    }} className="w-full bg-slate-800 text-white py-3 rounded-xl hover:bg-slate-700 transition font-medium">
+                      Restaurar Alimentos Padrão (TACO)
+                    </button>
+                </div>
              </div>
           </div>
        )}

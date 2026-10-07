@@ -1,5 +1,20 @@
 import { db } from '../db';
 import { formatDateId } from '../utils/dateUtils';
+import { defaultFoods } from '../data/seedData';
+
+export async function restoreDefaultFoods() {
+    const existingFoods = await db.foods.toArray();
+    const existingNames = new Set(existingFoods.map(f => f.name.toLowerCase()));
+    
+    const foodsToAdd = defaultFoods
+        .filter(f => !existingNames.has(f.name.toLowerCase()))
+        .map(f => ({ ...f, id: crypto.randomUUID() }));
+        
+    if (foodsToAdd.length > 0) {
+        await db.foods.bulkAdd(foodsToAdd);
+    }
+    return foodsToAdd.length;
+}
 
 export async function recalculateDailyTotal(date_id) {
   const entries = await db.meal_entries.where({ date_id }).toArray();

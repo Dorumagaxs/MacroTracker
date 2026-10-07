@@ -8,7 +8,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-md-surface pb-20 shadow-xl border-x border-slate-200 relative">
+    <div className="max-w-md mx-auto min-h-screen bg-md-surface pb-24 shadow-xl border-x border-slate-200 relative">
       <header className="p-4 bg-md-primary text-white text-center rounded-b-3xl shadow-sm">
         <h1 className="text-xl font-semibold tracking-wide">Macro Tracker</h1>
       </header>

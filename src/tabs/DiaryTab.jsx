@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { Plus, Droplet, Utensils } from 'lucide-react';
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 import { db } from '../db';
@@ -15,6 +16,7 @@ const MySwal = withReactContent(Swal);
 export default function DiaryTab({ selectedDate, setSelectedDate }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showWaterModal, setShowWaterModal] = useState(false);
+  const [showFabMenu, setShowFabMenu] = useState(false);
   
   const [addMode, setAddMode] = useState('catalog'); 
   const [mealName, setMealName] = useState('Almoço');
@@ -172,7 +174,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
   const hasWater = groupedEntries['Água'] && groupedEntries['Água'].length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative min-h-screen">
       <div className="bg-white p-5 rounded-[24px] shadow-sm border border-slate-100">
         <DateSelector date={selectedDate} onDateChange={setSelectedDate} label={getLabel()} onPrev={handlePrev} onNext={handleNext} />
         
@@ -209,7 +211,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="diary-meals">
           {(provided) => (
-            <div {...provided.droppableProps} ref={provided.innerRef}>
+            <div {...provided.droppableProps} ref={provided.innerRef} className="pb-32">
               {draggables.map((mName, index) => {
                  const entries = groupedEntries[mName];
                  return (
@@ -227,13 +229,24 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
           )}
         </Droppable>
       </DragDropContext>
-      
-      <div className="flex gap-3 pt-2">
-        <button onClick={() => setShowAddModal(true)} className="flex-1 py-4 border-2 border-dashed border-slate-300 text-slate-500 rounded-[24px] font-medium hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
-          <span className="text-xl leading-none">+</span> Alimento
-        </button>
-        <button onClick={() => setShowWaterModal(true)} className="flex-1 py-4 border-2 border-dashed border-cyan-200 text-cyan-600 rounded-[24px] font-medium hover:bg-cyan-50 transition-colors flex items-center justify-center gap-2">
-          <span className="text-xl leading-none">+</span> Água
+
+      {/* FAB: Floating Action Button */}
+      <div className="fixed bottom-[85px] right-5 z-40 flex flex-col items-end gap-3 pb-safe">
+        {showFabMenu && (
+            <div className="fixed inset-0 z-30 bg-black/5" onClick={() => setShowFabMenu(false)}></div>
+        )}
+        <div className={`flex flex-col items-end gap-3 z-40 transition-all duration-300 origin-bottom ${showFabMenu ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-90 pointer-events-none'}`}>
+            <button onClick={() => { setShowWaterModal(true); setShowFabMenu(false); }} className="flex items-center gap-3 bg-white text-cyan-600 pl-4 pr-3 py-2.5 rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.15)] font-medium hover:bg-slate-50 transition-colors border border-slate-100 active:scale-95">
+                <span className="text-sm">Registrar Água</span>
+                <div className="bg-cyan-100 p-2 rounded-full"><Droplet size={18} className="fill-cyan-500" /></div>
+            </button>
+            <button onClick={() => { setShowAddModal(true); setShowFabMenu(false); }} className="flex items-center gap-3 bg-white text-md-primary pl-4 pr-3 py-2.5 rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.15)] font-medium hover:bg-slate-50 transition-colors border border-slate-100 active:scale-95">
+                <span className="text-sm">Registrar Alimento</span>
+                <div className="bg-md-primary/10 p-2 rounded-full"><Utensils size={18} /></div>
+            </button>
+        </div>
+        <button onClick={() => setShowFabMenu(!showFabMenu)} className="z-40 bg-md-primary text-white w-14 h-14 rounded-[16px] shadow-[0_4px_20px_rgba(56,106,32,0.4)] flex items-center justify-center hover:bg-opacity-90 transition-transform active:scale-95">
+            <Plus size={30} className={`transition-transform duration-300 ${showFabMenu ? 'rotate-[135deg]' : ''}`} />
         </button>
       </div>
 
@@ -256,7 +269,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
       {/* Modal Alimento */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md h-[85vh] sm:h-auto rounded-t-3xl sm:rounded-3xl flex flex-col animate-slide-up">
+          <div className="bg-white w-full max-w-md h-[85vh] sm:h-auto rounded-t-3xl sm:rounded-3xl flex flex-col animate-slide-up shadow-2xl">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
               <h3 className="text-lg font-semibold text-slate-800">Registrar em: {getLabel()}</h3><button onClick={closeModal} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
             </div>
@@ -269,6 +282,7 @@ export default function DiaryTab({ selectedDate, setSelectedDate }) {
                   <option value="Almoço" />
                   <option value="Lanche da Tarde" />
                   <option value="Jantar" />
+                  <option value="Ceia" />
                </datalist>
             </div>
             

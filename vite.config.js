@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'prompt', // Atualiza o SW automaticamente quando houver novas versões
+      registerType: 'autoUpdate', // Atualiza o SW automaticamente quando houver novas versões
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Macro Tracker',
