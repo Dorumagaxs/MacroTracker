@@ -15,7 +15,9 @@ export default defineConfig({
         name: 'Macro Tracker',
         short_name: 'MacroTracker',
         description: 'Seu rastreador de macros',
-        theme_color: '#ffffff',
+        display: "standalone",
+        theme_color: "#386a20",
+        background_color: "#386a20",
         start_url: '/MacroTracker/',
         scope: '/MacroTracker/',
         icons: [
