@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 import { db } from '../db';
 import { formatDateId, isToday, isYesterday, isTomorrow, getDailyGoal } from '../utils/dateUtils';
-import { fmt } from '../utils/formatUtils';
+import { fmt, getMealMacros } from '../utils/formatUtils';
 import { addCustomEntry, deleteEntry, addFoodEntry, createNewFood, addWaterEntry, addSavedMealToDiary, getFoodByBarcode } from '../services/crud';
 import { fetchFoodByBarcode } from '../services/api';
 import DateSelector from '../components/DateSelector';
