@@ -2,8 +2,8 @@ import Dexie from 'dexie';
 import { defaultFoods } from './data/seedData';
 
 export const db = new Dexie('MacroTrackerDB');
-db.version(5).stores({
-  settings: 'id', foods: 'id, name', meals: 'id, name', daily_logs: 'date_id', meal_entries: 'id, date_id, meal_group_id'
+db.version(6).stores({
+  settings: 'id', foods: 'id, name, barcode', meals: 'id, name', daily_logs: 'date_id', meal_entries: 'id, date_id, meal_group_id'
 });
 
 const defaultGoals = { calories: 2500, protein: 160, fat: 70, carbs: 300, water: 3000 };

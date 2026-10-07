@@ -5,15 +5,13 @@ import { defaultFoods } from '../data/seedData';
 export async function restoreDefaultFoods() {
     const existingFoods = await db.foods.toArray();
     const existingNames = new Set(existingFoods.map(f => f.name.toLowerCase()));
-    
-    const foodsToAdd = defaultFoods
-        .filter(f => !existingNames.has(f.name.toLowerCase()))
-        .map(f => ({ ...f, id: crypto.randomUUID() }));
-        
-    if (foodsToAdd.length > 0) {
-        await db.foods.bulkAdd(foodsToAdd);
-    }
+    const foodsToAdd = defaultFoods.filter(f => !existingNames.has(f.name.toLowerCase())).map(f => ({ ...f, id: crypto.randomUUID() }));
+    if (foodsToAdd.length > 0) { await db.foods.bulkAdd(foodsToAdd); }
     return foodsToAdd.length;
+}
+
+export async function getFoodByBarcode(barcode) {
+    return await db.foods.where('barcode').equals(barcode).first();
 }
 
 export async function recalculateDailyTotal(date_id) {
@@ -56,11 +54,7 @@ export async function addFoodEntry(meal_name, food, qty_consumed, dateObj) {
     id: crypto.randomUUID(), date_id, meal_name, food_id: food.id, food_name: food.name, is_custom: false, is_water: false,
     qty_consumed: Number(qty_consumed), serving_unit: food.serving_unit,
     calories: food.calories * ratio,
-    macros: {
-      protein: food.macros.protein * ratio,
-      fat: food.macros.fat * ratio,
-      carbs: food.macros.carbs * ratio
-    }, created_at: Date.now()
+    macros: { protein: food.macros.protein * ratio, fat: food.macros.fat * ratio, carbs: food.macros.carbs * ratio }, created_at: Date.now()
   });
   await recalculateDailyTotal(date_id);
 }
@@ -71,23 +65,18 @@ export async function addSavedMealToDiary(meal_name, saved_meal, dateObj) {
   const entriesToAdd = saved_meal.items.map((item, index) => {
       const ratio = Number(item.qty) / item.food.base_serving;
       return {
-          id: crypto.randomUUID(), date_id, meal_name: meal_name,
-          food_id: item.food.id, food_name: item.food.name, is_custom: false, is_water: false,
-          qty_consumed: Number(item.qty), serving_unit: item.food.serving_unit,
-          calories: item.food.calories * ratio,
-          macros: { protein: item.food.macros.protein * ratio, fat: item.food.macros.fat * ratio, carbs: item.food.macros.carbs * ratio },
-          created_at: timestamp + index 
+          id: crypto.randomUUID(), date_id, meal_name: meal_name, food_id: item.food.id, food_name: item.food.name, is_custom: false, is_water: false,
+          qty_consumed: Number(item.qty), serving_unit: item.food.serving_unit, calories: item.food.calories * ratio,
+          macros: { protein: item.food.macros.protein * ratio, fat: item.food.macros.fat * ratio, carbs: item.food.macros.carbs * ratio }, created_at: timestamp + index 
       };
   });
   await db.meal_entries.bulkAdd(entriesToAdd);
   await recalculateDailyTotal(date_id);
 }
 
-export async function createNewFood(name, base_serving, unit, calories, protein, fat, carbs) {
-  const newFood = {
-    id: crypto.randomUUID(), name, base_serving: Number(base_serving), serving_unit: unit,
-    calories: Number(calories), macros: { protein: Number(protein), fat: Number(fat), carbs: Number(carbs) }
-  };
+export async function createNewFood(name, base_serving, unit, calories, protein, fat, carbs, barcode = null) {
+  const newFood = { id: crypto.randomUUID(), name, base_serving: Number(base_serving), serving_unit: unit, calories: Number(calories), macros: { protein: Number(protein), fat: Number(fat), carbs: Number(carbs) } };
+  if(barcode) newFood.barcode = barcode;
   await db.foods.add(newFood);
   return newFood;
 }

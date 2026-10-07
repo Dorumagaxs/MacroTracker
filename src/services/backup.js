@@ -1,18 +1,10 @@
 import { db } from '../db';
 export async function exportData(type = 'full') {
     let data = {};
-    if (type === 'catalog') {
-        data = { settings: await db.settings.toArray(), foods: await db.foods.toArray(), meals: await db.meals.toArray() };
-    } else {
-        data = {
-            settings: await db.settings.toArray(), foods: await db.foods.toArray(), meals: await db.meals.toArray(),
-            daily_logs: await db.daily_logs.toArray(), meal_entries: await db.meal_entries.toArray()
-        };
-    }
-    const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `macro-tracker-${type === 'catalog' ? 'catalog' : 'backup'}-${new Date().toISOString().split('T')[0]}.json`;
+    if (type === 'catalog') { data = { settings: await db.settings.toArray(), foods: await db.foods.toArray(), meals: await db.meals.toArray() }; } 
+    else { data = { settings: await db.settings.toArray(), foods: await db.foods.toArray(), meals: await db.meals.toArray(), daily_logs: await db.daily_logs.toArray(), meal_entries: await db.meal_entries.toArray() }; }
+    const blob = new Blob([JSON.stringify(data)], {type: 'application/json'}); const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `macro-tracker-${type === 'catalog' ? 'catalog' : 'backup'}-${new Date().toISOString().split('T')[0]}.json`;
     a.click(); URL.revokeObjectURL(url);
 }
 export async function importData(jsonString, mode) {

@@ -1,3 +1,9 @@
+# v0.1.5
+- Features:
+    - Base de dados padrão ampliada para 300 alimentos, incluindo alguns industrializados
+    - Implementada a leitura de barra de códigos, com conexão à API Open Food Facts
+    - Botão de registro de alimentos e água trocado para um floating button
+
 # v0.1.4
 - Features:
     - Barra vermelha de sobreposição quando a meta diária for ultrapassada
