@@ -1,6 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+    --color-md-surface: #fbfdf8;
+    --color-md-primary: #386a20;
+    --color-md-secondary: #55624c;
+    --color-md-tertiary: #19686a;
+    --color-md-error: #ba1a1a;
+}
 
 @layer base {
     body {

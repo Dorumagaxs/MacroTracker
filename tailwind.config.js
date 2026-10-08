@@ -1,1 +1,0 @@
-export default { content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"], theme: { extend: { colors: { md: { surface: "#fbfdf8", primary: "#386a20", secondary: "#55624c", tertiary: "#19686a", error: "#ba1a1a" } } } }, plugins: [], }
